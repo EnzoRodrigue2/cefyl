@@ -4,8 +4,9 @@ import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Printer, FileText, Clock, GraduationCap, Plus, LogOut } from 'lucide-react';
+import { Printer, FileText, Clock, GraduationCap, Plus, LogOut, Send } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { toast } from 'sonner';
 
 const ESTADO_COLORS: Record<string, string> = {
   borrador: 'bg-muted text-muted-foreground',
@@ -29,14 +30,30 @@ const ESTADO_LABELS: Record<string, string> = {
   cancelada: 'Cancelada',
 };
 
+const BECA_ESTADO_COLORS: Record<string, string> = {
+  pendiente: 'bg-warning/20 text-warning',
+  aprobada: 'bg-success/20 text-success',
+  rechazada: 'bg-destructive/20 text-destructive',
+  revocada: 'bg-muted text-muted-foreground',
+};
+
+const BECA_ESTADO_LABELS: Record<string, string> = {
+  pendiente: 'Pendiente',
+  aprobada: 'Aprobada',
+  rechazada: 'Rechazada',
+  revocada: 'Revocada',
+};
+
 export default function Dashboard() {
   const { user, signOut, isAdmin } = useAuth();
   const navigate = useNavigate();
   const [profile, setProfile] = useState<any>(null);
   const [ordenes, setOrdenes] = useState<any[]>([]);
-  const [beca, setBeca] = useState<any>(null);
+  const [becas, setBecas] = useState<any[]>([]);
+  const [becaActiva, setBecaActiva] = useState<any>(null);
   const [becaUso, setBecaUso] = useState<number>(0);
   const [config, setConfig] = useState<Record<string, string>>({});
+  const [solicitandoBeca, setSolicitandoBeca] = useState(false);
 
   useEffect(() => {
     if (!user) return;
@@ -44,21 +61,25 @@ export default function Dashboard() {
   }, [user]);
 
   async function loadData() {
-    const [profileRes, ordenesRes, becaRes, configRes] = await Promise.all([
+    const [profileRes, ordenesRes, becasRes, configRes] = await Promise.all([
       supabase.from('profiles').select('*').eq('user_id', user!.id).single(),
       supabase.from('ordenes').select('*').eq('user_id', user!.id).order('created_at', { ascending: false }),
-      supabase.from('becas').select('*').eq('user_id', user!.id).eq('estado', 'aprobada').maybeSingle(),
+      supabase.from('becas').select('*').eq('user_id', user!.id).order('created_at', { ascending: false }),
       supabase.from('configuraciones').select('*'),
     ]);
     setProfile(profileRes.data);
     setOrdenes(ordenesRes.data || []);
-    setBeca(becaRes.data);
     
+    const allBecas = becasRes.data || [];
+    setBecas(allBecas);
+    const activa = allBecas.find((b: any) => b.estado === 'aprobada');
+    setBecaActiva(activa || null);
+
     const cfgMap: Record<string, string> = {};
     configRes.data?.forEach((c: any) => { cfgMap[c.clave] = c.valor; });
     setConfig(cfgMap);
 
-    if (becaRes.data?.tipo === '100') {
+    if (activa?.tipo === '100') {
       const now = new Date();
       const usoRes = await supabase.from('beca_uso_mensual').select('monto_usado')
         .eq('user_id', user!.id).eq('mes', now.getMonth() + 1).eq('anio', now.getFullYear()).maybeSingle();
@@ -66,8 +87,37 @@ export default function Dashboard() {
     }
   }
 
+  async function solicitarBeca() {
+    if (!user) return;
+    // Check if there's already a pending request
+    const pendiente = becas.find((b: any) => b.estado === 'pendiente');
+    if (pendiente) {
+      toast.error('Ya tenés una solicitud de beca pendiente');
+      return;
+    }
+    if (becaActiva) {
+      toast.error('Ya tenés una beca activa');
+      return;
+    }
+
+    setSolicitandoBeca(true);
+    const { error } = await supabase.from('becas').insert({
+      user_id: user.id,
+      tipo: 'sin_beca',
+      estado: 'pendiente',
+    });
+    if (error) {
+      toast.error('Error al solicitar beca: ' + error.message);
+    } else {
+      toast.success('¡Solicitud de beca enviada! El administrador la revisará pronto.');
+      loadData();
+    }
+    setSolicitandoBeca(false);
+  }
+
   const limiteBeca = Number(config.limite_beca_100 || 5000);
   const saldoDisponible = limiteBeca - becaUso;
+  const tieneSolicitudPendiente = becas.some((b: any) => b.estado === 'pendiente');
 
   return (
     <div className="min-h-screen bg-background">
@@ -76,7 +126,7 @@ export default function Dashboard() {
           <div className="p-2 rounded-lg bg-primary">
             <Printer className="h-5 w-5 text-primary-foreground" />
           </div>
-          <span className="text-xl font-bold">PrintHub</span>
+          <span className="text-xl font-bold">IMPRESIONES CEFyL</span>
         </div>
         <div className="flex items-center gap-3">
           {isAdmin && <Button variant="outline" size="sm" onClick={() => navigate('/admin')}>Panel Admin</Button>}
@@ -97,10 +147,10 @@ export default function Dashboard() {
           <Card>
             <CardHeader className="pb-2">
               <CardDescription className="flex items-center gap-1"><GraduationCap className="h-3.5 w-3.5" /> Beca</CardDescription>
-              <CardTitle className="text-2xl">{beca ? `${beca.tipo}%` : 'Sin beca'}</CardTitle>
+              <CardTitle className="text-2xl">{becaActiva ? `${becaActiva.tipo}%` : 'Sin beca'}</CardTitle>
             </CardHeader>
           </Card>
-          {beca?.tipo === '100' && (
+          {becaActiva?.tipo === '100' && (
             <Card>
               <CardHeader className="pb-2">
                 <CardDescription className="flex items-center gap-1"><Clock className="h-3.5 w-3.5" /> Saldo beca mensual</CardDescription>
@@ -116,6 +166,51 @@ export default function Dashboard() {
             </Card>
           )}
         </div>
+
+        {/* Scholarship section */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2"><GraduationCap className="h-5 w-5" /> Mi beca</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {becaActiva ? (
+              <div className="flex items-center gap-3">
+                <Badge className="bg-success/20 text-success">Aprobada</Badge>
+                <span className="font-medium">Beca del {becaActiva.tipo}%</span>
+                {becaActiva.fecha_vencimiento && (
+                  <span className="text-sm text-muted-foreground">· Vence: {new Date(becaActiva.fecha_vencimiento).toLocaleDateString('es-AR')}</span>
+                )}
+              </div>
+            ) : tieneSolicitudPendiente ? (
+              <div className="flex items-center gap-3">
+                <Badge className="bg-warning/20 text-warning">Pendiente</Badge>
+                <span className="text-sm text-muted-foreground">Tu solicitud de beca está siendo evaluada por el administrador.</span>
+              </div>
+            ) : (
+              <div className="flex items-center justify-between">
+                <p className="text-muted-foreground text-sm">No tenés beca activa. Podés solicitar una para obtener descuentos en tus impresiones.</p>
+                <Button onClick={solicitarBeca} disabled={solicitandoBeca} variant="secondary" className="gap-2">
+                  <Send className="h-4 w-4" /> {solicitandoBeca ? 'Enviando...' : 'Solicitar beca'}
+                </Button>
+              </div>
+            )}
+
+            {/* Scholarship history */}
+            {becas.length > 1 && (
+              <div className="mt-4 pt-4 border-t space-y-2">
+                <p className="text-xs font-medium text-muted-foreground uppercase">Historial de solicitudes</p>
+                {becas.filter(b => b.id !== becaActiva?.id).map((b: any) => (
+                  <div key={b.id} className="flex items-center gap-2 text-sm">
+                    <Badge className={BECA_ESTADO_COLORS[b.estado] || ''}>{BECA_ESTADO_LABELS[b.estado]}</Badge>
+                    <span>{b.tipo !== 'sin_beca' ? `${b.tipo}%` : '—'}</span>
+                    <span className="text-muted-foreground">· {new Date(b.created_at).toLocaleDateString('es-AR')}</span>
+                    {b.motivo_revocacion && <span className="text-xs text-destructive">({b.motivo_revocacion})</span>}
+                  </div>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
 
         {/* New order button */}
         <Button onClick={() => navigate('/nueva-orden')} className="gap-2">
