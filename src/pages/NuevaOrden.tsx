@@ -88,7 +88,7 @@ export default function NuevaOrden() {
     <div className="min-h-screen bg-background p-6">
       <div className="max-w-2xl mx-auto animate-fade-in">
         <Button variant="ghost" className="mb-4 gap-2" onClick={() => navigate('/dashboard')}>
-          <ArrowLeft className="h-4 w-4" /> Volver
+          <ArrowLeft className="h-4 w-4" /> Volver a IMPRESIONES CEFyL
         </Button>
 
         <Card>

@@ -1,10 +1,11 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
+import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -12,9 +13,15 @@ import { toast } from 'sonner';
 import { Printer, GraduationCap } from 'lucide-react';
 
 const CARRERAS = [
-  'Ingeniería en Sistemas', 'Ingeniería Civil', 'Ingeniería Industrial',
-  'Abogacía', 'Contador Público', 'Administración de Empresas',
-  'Medicina', 'Psicología', 'Arquitectura', 'Diseño Gráfico',
+  'Filosofía',
+  'Historia',
+  'Letras',
+  'Geografía',
+  'Ciencias de la Educación',
+  'Ciencias Antropológicas',
+  'Artes',
+  'Bibliotecología y Ciencia de la Información',
+  'Edición',
 ];
 
 export default function Auth() {
@@ -50,11 +57,27 @@ export default function Auth() {
     if (regPassword.length < 8) { toast.error('La contraseña debe tener al menos 8 caracteres'); return; }
     if (!aceptaTerminos) { toast.error('Debes aceptar los términos y condiciones'); return; }
     if (!/^\d{7,8}$/.test(dni)) { toast.error('DNI inválido (7-8 dígitos)'); return; }
+    if (!carrera) { toast.error('Seleccioná tu carrera'); return; }
 
+    // Check DNI uniqueness before attempting signup
     setLoading(true);
+    const { data: existingDni } = await supabase.from('profiles').select('id').eq('dni', dni).maybeSingle();
+    if (existingDni) {
+      toast.error('Ya existe una cuenta con ese DNI');
+      setLoading(false);
+      return;
+    }
+
     const { error } = await signUp(regEmail, regPassword, { nombre_completo: nombre, dni, carrera });
-    if (error) toast.error(error.message);
-    else toast.success('¡Registro exitoso! Revisá tu email para confirmar tu cuenta.');
+    if (error) {
+      if (error.message.includes('already registered')) {
+        toast.error('Ya existe una cuenta con ese email');
+      } else {
+        toast.error(error.message);
+      }
+    } else {
+      toast.success('¡Registro exitoso! Revisá tu email para confirmar tu cuenta.');
+    }
     setLoading(false);
   };
 
@@ -66,10 +89,10 @@ export default function Auth() {
             <div className="p-2.5 rounded-xl bg-primary">
               <Printer className="h-7 w-7 text-primary-foreground" />
             </div>
-            <h1 className="text-3xl font-extrabold text-foreground">PrintHub</h1>
+            <h1 className="text-3xl font-extrabold text-foreground">IMPRESIONES CEFyL</h1>
           </div>
           <p className="text-muted-foreground flex items-center justify-center gap-1">
-            <GraduationCap className="h-4 w-4" /> Tu centro de impresiones universitario
+            <GraduationCap className="h-4 w-4" /> Centro de impresiones · Filosofía y Letras
           </p>
         </div>
 
@@ -104,7 +127,7 @@ export default function Auth() {
                   </div>
                   <div className="space-y-2">
                     <Label>DNI</Label>
-                    <Input value={dni} onChange={e => setDni(e.target.value)} required placeholder="12345678" maxLength={8} />
+                    <Input value={dni} onChange={e => setDni(e.target.value.replace(/\D/g, ''))} required placeholder="12345678" maxLength={8} />
                   </div>
                   <div className="space-y-2">
                     <Label>Email</Label>
@@ -112,7 +135,7 @@ export default function Auth() {
                   </div>
                   <div className="space-y-2">
                     <Label>Carrera</Label>
-                    <Select value={carrera} onValueChange={setCarrera} required>
+                    <Select value={carrera} onValueChange={setCarrera}>
                       <SelectTrigger><SelectValue placeholder="Seleccioná tu carrera" /></SelectTrigger>
                       <SelectContent>
                         {CARRERAS.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
