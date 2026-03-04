@@ -4,6 +4,8 @@ import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
+import { Label } from '@/components/ui/label';
 import { Printer, FileText, Clock, GraduationCap, Plus, LogOut, Send } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
@@ -54,6 +56,8 @@ export default function Dashboard() {
   const [becaUso, setBecaUso] = useState<number>(0);
   const [config, setConfig] = useState<Record<string, string>>({});
   const [solicitandoBeca, setSolicitandoBeca] = useState(false);
+  const [becaTipoSolicitada, setBecaTipoSolicitada] = useState<'50' | '100'>('50');
+  const [mostrarFormBeca, setMostrarFormBeca] = useState(false);
 
   useEffect(() => {
     if (!user) return;
@@ -89,7 +93,6 @@ export default function Dashboard() {
 
   async function solicitarBeca() {
     if (!user) return;
-    // Check if there's already a pending request
     const pendiente = becas.find((b: any) => b.estado === 'pendiente');
     if (pendiente) {
       toast.error('Ya tenés una solicitud de beca pendiente');
@@ -103,13 +106,14 @@ export default function Dashboard() {
     setSolicitandoBeca(true);
     const { error } = await supabase.from('becas').insert({
       user_id: user.id,
-      tipo: 'sin_beca',
+      tipo: becaTipoSolicitada,
       estado: 'pendiente',
     });
     if (error) {
       toast.error('Error al solicitar beca: ' + error.message);
     } else {
-      toast.success('¡Solicitud de beca enviada! El administrador la revisará pronto.');
+      toast.success(`¡Solicitud de beca del ${becaTipoSolicitada}% enviada! El administrador la revisará pronto.`);
+      setMostrarFormBeca(false);
       loadData();
     }
     setSolicitandoBeca(false);
@@ -118,6 +122,7 @@ export default function Dashboard() {
   const limiteBeca = Number(config.limite_beca_100 || 5000);
   const saldoDisponible = limiteBeca - becaUso;
   const tieneSolicitudPendiente = becas.some((b: any) => b.estado === 'pendiente');
+  const solicitudPendiente = becas.find((b: any) => b.estado === 'pendiente');
 
   return (
     <div className="min-h-screen bg-background">
@@ -184,13 +189,35 @@ export default function Dashboard() {
             ) : tieneSolicitudPendiente ? (
               <div className="flex items-center gap-3">
                 <Badge className="bg-warning/20 text-warning">Pendiente</Badge>
-                <span className="text-sm text-muted-foreground">Tu solicitud de beca está siendo evaluada por el administrador.</span>
+                <span className="text-sm text-muted-foreground">
+                  Tu solicitud de beca del {solicitudPendiente?.tipo !== 'sin_beca' ? `${solicitudPendiente?.tipo}%` : ''} está siendo evaluada por el administrador.
+                </span>
+              </div>
+            ) : mostrarFormBeca ? (
+              <div className="space-y-4">
+                <p className="text-sm text-muted-foreground">Seleccioná el tipo de beca que querés solicitar:</p>
+                <RadioGroup value={becaTipoSolicitada} onValueChange={(v) => setBecaTipoSolicitada(v as '50' | '100')} className="flex gap-6">
+                  <div className="flex items-center gap-2">
+                    <RadioGroupItem value="50" id="beca-50" />
+                    <Label htmlFor="beca-50" className="cursor-pointer">Beca del 50%</Label>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <RadioGroupItem value="100" id="beca-100" />
+                    <Label htmlFor="beca-100" className="cursor-pointer">Beca del 100%</Label>
+                  </div>
+                </RadioGroup>
+                <div className="flex gap-2">
+                  <Button onClick={solicitarBeca} disabled={solicitandoBeca} variant="secondary" className="gap-2">
+                    <Send className="h-4 w-4" /> {solicitandoBeca ? 'Enviando...' : 'Enviar solicitud'}
+                  </Button>
+                  <Button variant="ghost" onClick={() => setMostrarFormBeca(false)}>Cancelar</Button>
+                </div>
               </div>
             ) : (
               <div className="flex items-center justify-between">
                 <p className="text-muted-foreground text-sm">No tenés beca activa. Podés solicitar una para obtener descuentos en tus impresiones.</p>
-                <Button onClick={solicitarBeca} disabled={solicitandoBeca} variant="secondary" className="gap-2">
-                  <Send className="h-4 w-4" /> {solicitandoBeca ? 'Enviando...' : 'Solicitar beca'}
+                <Button onClick={() => setMostrarFormBeca(true)} variant="secondary" className="gap-2">
+                  <Send className="h-4 w-4" /> Solicitar beca
                 </Button>
               </div>
             )}

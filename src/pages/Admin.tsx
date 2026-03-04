@@ -185,8 +185,10 @@ export default function Admin() {
                     {becasPendientes.map((b: any) => (
                       <div key={b.id} className="flex items-center justify-between p-4 rounded-lg border bg-warning/5">
                         <div>
-                          <p className="font-medium">{getUserName(b.user_id)}</p>
-                          <p className="text-xs text-muted-foreground">Solicitada: {new Date(b.created_at).toLocaleDateString('es-AR')}</p>
+                         <p className="font-medium">{getUserName(b.user_id)}</p>
+                          <p className="text-xs text-muted-foreground">
+                            Solicitó: <span className="font-medium">{b.tipo !== 'sin_beca' ? `${b.tipo}%` : 'Sin especificar'}</span> · {new Date(b.created_at).toLocaleDateString('es-AR')}
+                          </p>
                         </div>
                         <div className="flex items-center gap-2">
                           <Select onValueChange={(tipo) => aprobarBeca(b.id, tipo)}>
