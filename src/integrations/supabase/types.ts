@@ -192,6 +192,7 @@ export type Database = {
       }
       ordenes: {
         Row: {
+          anillado: boolean | null
           archivo_nombre: string
           archivo_url: string
           cantidad_hojas: number
@@ -207,9 +208,11 @@ export type Database = {
           monto_final: number
           precio_base: number
           updated_at: string | null
+          usar_beca: boolean | null
           user_id: string
         }
         Insert: {
+          anillado?: boolean | null
           archivo_nombre: string
           archivo_url: string
           cantidad_hojas?: number
@@ -225,9 +228,11 @@ export type Database = {
           monto_final?: number
           precio_base?: number
           updated_at?: string | null
+          usar_beca?: boolean | null
           user_id: string
         }
         Update: {
+          anillado?: boolean | null
           archivo_nombre?: string
           archivo_url?: string
           cantidad_hojas?: number
@@ -243,6 +248,7 @@ export type Database = {
           monto_final?: number
           precio_base?: number
           updated_at?: string | null
+          usar_beca?: boolean | null
           user_id?: string
         }
         Relationships: []
