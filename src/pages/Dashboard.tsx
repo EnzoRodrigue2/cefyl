@@ -4,12 +4,9 @@ import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
-import { Label } from '@/components/ui/label';
 import { Progress } from '@/components/ui/progress';
-import { Printer, FileText, Clock, GraduationCap, Plus, LogOut, Send, AlertTriangle } from 'lucide-react';
+import { Printer, FileText, Clock, GraduationCap, Plus, LogOut, AlertTriangle } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { toast } from 'sonner';
 
 const ESTADO_COLORS: Record<string, string> = {
   borrador: 'bg-muted text-muted-foreground',
@@ -28,26 +25,14 @@ const ESTADO_LABELS: Record<string, string> = {
   retirada: 'Retirada', cancelada: 'Cancelada',
 };
 
-const BECA_ESTADO_COLORS: Record<string, string> = {
-  pendiente: 'bg-warning/20 text-warning', aprobada: 'bg-success/20 text-success',
-  rechazada: 'bg-destructive/20 text-destructive', revocada: 'bg-muted text-muted-foreground',
-};
-const BECA_ESTADO_LABELS: Record<string, string> = {
-  pendiente: 'Pendiente', aprobada: 'Aprobada', rechazada: 'Rechazada', revocada: 'Revocada',
-};
-
 export default function Dashboard() {
   const { user, signOut, isAdmin } = useAuth();
   const navigate = useNavigate();
   const [profile, setProfile] = useState<any>(null);
   const [ordenes, setOrdenes] = useState<any[]>([]);
-  const [becas, setBecas] = useState<any[]>([]);
   const [becaActiva, setBecaActiva] = useState<any>(null);
   const [becaUso, setBecaUso] = useState(0);
   const [limiteBeca, setLimiteBeca] = useState(5000);
-  const [solicitandoBeca, setSolicitandoBeca] = useState(false);
-  const [becaTipoSolicitada, setBecaTipoSolicitada] = useState<'50' | '100'>('50');
-  const [mostrarFormBeca, setMostrarFormBeca] = useState(false);
 
   useEffect(() => { if (user) loadData(); }, [user]);
 
@@ -55,22 +40,19 @@ export default function Dashboard() {
     const [profileRes, ordenesRes, becasRes, configRes] = await Promise.all([
       supabase.from('profiles').select('*').eq('user_id', user!.id).single(),
       supabase.from('ordenes').select('*').eq('user_id', user!.id).order('created_at', { ascending: false }),
-      supabase.from('becas').select('*').eq('user_id', user!.id).order('created_at', { ascending: false }),
+      supabase.from('becas').select('*').eq('user_id', user!.id).eq('estado', 'aprobada').maybeSingle(),
       supabase.from('configuraciones').select('*'),
     ]);
     setProfile(profileRes.data);
     setOrdenes(ordenesRes.data || []);
-    const allBecas = becasRes.data || [];
-    setBecas(allBecas);
-    const activa = allBecas.find((b: any) => b.estado === 'aprobada');
-    setBecaActiva(activa || null);
+    setBecaActiva(becasRes.data || null);
 
     const cfgMap: Record<string, string> = {};
     configRes.data?.forEach((c: any) => { cfgMap[c.clave] = c.valor; });
     const limite = Number(cfgMap.limite_beca_100 || 5000);
     setLimiteBeca(limite);
 
-    if (activa?.tipo === '100') {
+    if (becasRes.data?.tipo === '100') {
       const now = new Date();
       const usoRes = await supabase.from('beca_uso_mensual').select('monto_usado')
         .eq('user_id', user!.id).eq('mes', now.getMonth() + 1).eq('anio', now.getFullYear()).maybeSingle();
@@ -78,21 +60,8 @@ export default function Dashboard() {
     }
   }
 
-  async function solicitarBeca() {
-    if (!user) return;
-    if (becas.find((b: any) => b.estado === 'pendiente')) { toast.error('Ya tenés una solicitud pendiente'); return; }
-    if (becaActiva) { toast.error('Ya tenés una beca activa'); return; }
-    setSolicitandoBeca(true);
-    const { error } = await supabase.from('becas').insert({ user_id: user.id, tipo: becaTipoSolicitada, estado: 'pendiente' });
-    if (error) toast.error('Error: ' + error.message);
-    else { toast.success(`Solicitud de beca del ${becaTipoSolicitada}% enviada`); setMostrarFormBeca(false); loadData(); }
-    setSolicitandoBeca(false);
-  }
-
   const saldoDisponible = limiteBeca - becaUso;
   const usoPct = limiteBeca > 0 ? Math.min((becaUso / limiteBeca) * 100, 100) : 0;
-  const tieneSolicitudPendiente = becas.some((b: any) => b.estado === 'pendiente');
-  const solicitudPendiente = becas.find((b: any) => b.estado === 'pendiente');
 
   return (
     <div className="min-h-screen bg-background">
@@ -156,82 +125,35 @@ export default function Dashboard() {
           </div>
         )}
 
-        {/* Scholarship section */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2"><GraduationCap className="h-5 w-5" /> Mi beca</CardTitle>
-          </CardHeader>
-          <CardContent>
-            {becaActiva ? (
-              <div className="space-y-2">
-                <div className="flex items-center gap-3">
-                  <Badge className="bg-success/20 text-success">Aprobada</Badge>
-                  <span className="font-medium">Beca del {becaActiva.tipo}%</span>
-                  {becaActiva.fecha_vencimiento && (
-                    <span className="text-sm text-muted-foreground">· Vence: {new Date(becaActiva.fecha_vencimiento).toLocaleDateString('es-AR')}</span>
-                  )}
-                </div>
-                {becaActiva.tipo === '50' && (
-                  <p className="text-sm text-muted-foreground">Tenés un 50% de descuento en todas tus impresiones.</p>
-                )}
-                {becaActiva.tipo === '100' && (
-                  <div className="mt-2 p-3 rounded-lg bg-muted">
-                    <div className="flex justify-between text-sm mb-1">
-                      <span>Consumo mensual</span>
-                      <span className="font-medium">${becaUso.toLocaleString('es-AR')} / ${limiteBeca.toLocaleString('es-AR')}</span>
-                    </div>
-                    <Progress value={usoPct} className="h-2" />
-                    <p className="text-xs text-muted-foreground mt-1">
-                      Disponible: <span className={`font-bold ${saldoDisponible < 1000 ? 'text-destructive' : 'text-primary'}`}>${saldoDisponible.toLocaleString('es-AR')}</span>
-                    </p>
-                  </div>
-                )}
-              </div>
-            ) : tieneSolicitudPendiente ? (
+        {/* Beca info card */}
+        {becaActiva && (
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2"><GraduationCap className="h-5 w-5" /> Mi beca</CardTitle>
+            </CardHeader>
+            <CardContent>
               <div className="flex items-center gap-3">
-                <Badge className="bg-warning/20 text-warning">Pendiente</Badge>
-                <span className="text-sm text-muted-foreground">
-                  Tu solicitud de beca del {solicitudPendiente?.tipo}% está siendo evaluada.
-                </span>
+                <Badge className="bg-primary/20 text-primary">Activa</Badge>
+                <span className="font-medium">Beca del {becaActiva.tipo}%</span>
               </div>
-            ) : mostrarFormBeca ? (
-              <div className="space-y-4">
-                <p className="text-sm text-muted-foreground">Seleccioná el tipo de beca:</p>
-                <RadioGroup value={becaTipoSolicitada} onValueChange={(v) => setBecaTipoSolicitada(v as '50' | '100')} className="flex gap-6">
-                  <div className="flex items-center gap-2"><RadioGroupItem value="50" id="beca-50" /><Label htmlFor="beca-50" className="cursor-pointer">Beca del 50%</Label></div>
-                  <div className="flex items-center gap-2"><RadioGroupItem value="100" id="beca-100" /><Label htmlFor="beca-100" className="cursor-pointer">Beca del 100%</Label></div>
-                </RadioGroup>
-                <div className="flex gap-2">
-                  <Button onClick={solicitarBeca} disabled={solicitandoBeca} variant="secondary" className="gap-2">
-                    <Send className="h-4 w-4" /> {solicitandoBeca ? 'Enviando...' : 'Enviar solicitud'}
-                  </Button>
-                  <Button variant="ghost" onClick={() => setMostrarFormBeca(false)}>Cancelar</Button>
-                </div>
-              </div>
-            ) : (
-              <div className="flex items-center justify-between">
-                <p className="text-muted-foreground text-sm">No tenés beca activa.</p>
-                <Button onClick={() => setMostrarFormBeca(true)} variant="secondary" className="gap-2">
-                  <Send className="h-4 w-4" /> Solicitar beca
-                </Button>
-              </div>
-            )}
-
-            {becas.length > 1 && (
-              <div className="mt-4 pt-4 border-t space-y-2">
-                <p className="text-xs font-medium text-muted-foreground uppercase">Historial</p>
-                {becas.filter(b => b.id !== becaActiva?.id).map((b: any) => (
-                  <div key={b.id} className="flex items-center gap-2 text-sm">
-                    <Badge className={BECA_ESTADO_COLORS[b.estado] || ''}>{BECA_ESTADO_LABELS[b.estado]}</Badge>
-                    <span>{b.tipo !== 'sin_beca' ? `${b.tipo}%` : '—'}</span>
-                    <span className="text-muted-foreground">· {new Date(b.created_at).toLocaleDateString('es-AR')}</span>
-                    {b.motivo_revocacion && <span className="text-xs text-destructive">({b.motivo_revocacion})</span>}
+              {becaActiva.tipo === '100' && (
+                <div className="mt-3 p-3 rounded-lg bg-muted">
+                  <div className="flex justify-between text-sm mb-1">
+                    <span>Consumo mensual</span>
+                    <span className="font-medium">${becaUso.toLocaleString('es-AR')} / ${limiteBeca.toLocaleString('es-AR')}</span>
                   </div>
-                ))}
-              </div>
-            )}
-          </CardContent>
-        </Card>
+                  <Progress value={usoPct} className="h-2" />
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Disponible: <span className={`font-bold ${saldoDisponible < 1000 ? 'text-destructive' : 'text-primary'}`}>${saldoDisponible.toLocaleString('es-AR')}</span>
+                  </p>
+                </div>
+              )}
+              {becaActiva.tipo === '50' && (
+                <p className="text-sm text-muted-foreground mt-2">Tenés un 50% de descuento en todas tus impresiones.</p>
+              )}
+            </CardContent>
+          </Card>
+        )}
 
         <Button onClick={() => navigate('/nueva-orden')} className="gap-2"><Plus className="h-4 w-4" /> Nueva impresión</Button>
 
