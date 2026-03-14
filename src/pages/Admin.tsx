@@ -7,8 +7,9 @@ import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Users, FileText, DollarSign, Settings, GraduationCap, X, Download, History } from 'lucide-react';
+import { ArrowLeft, Users, FileText, DollarSign, Settings, GraduationCap, Download, History, Upload, Trash2, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import * as XLSX from 'xlsx';
 
@@ -19,17 +20,18 @@ const ESTADO_LABELS: Record<string, string> = {
 };
 
 export default function Admin() {
-  const { isAdmin } = useAuth();
+  const { isAdmin, session } = useAuth();
   const navigate = useNavigate();
   const [ordenes, setOrdenes] = useState<any[]>([]);
   const [usuarios, setUsuarios] = useState<any[]>([]);
   const [config, setConfig] = useState<any[]>([]);
-  const [becasPendientes, setBecasPendientes] = useState<any[]>([]);
   const [becasActivas, setBecasActivas] = useState<any[]>([]);
   const [searchDni, setSearchDni] = useState('');
-  const [stats, setStats] = useState({ ordenesHoy: 0, ingresosHoy: 0, becasActivas: 0, becasPendientes: 0 });
+  const [stats, setStats] = useState({ ordenesHoy: 0, ingresosHoy: 0, becasActivas: 0, totalUsuarios: 0 });
   const [fechaDesde, setFechaDesde] = useState('');
   const [fechaHasta, setFechaHasta] = useState('');
+  const [uploading, setUploading] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
     if (!isAdmin) { navigate('/dashboard'); return; }
@@ -38,24 +40,22 @@ export default function Admin() {
 
   async function loadAll() {
     const today = new Date().toISOString().split('T')[0];
-    const [ordenesRes, usersRes, configRes, becasPendRes, becasActRes] = await Promise.all([
+    const [ordenesRes, usersRes, configRes, becasActRes] = await Promise.all([
       supabase.from('ordenes').select('*').order('created_at', { ascending: false }).limit(200),
       supabase.from('profiles').select('*').order('created_at', { ascending: false }),
       supabase.from('configuraciones').select('*'),
-      supabase.from('becas').select('*').eq('estado', 'pendiente').order('created_at', { ascending: true }),
       supabase.from('becas').select('*').eq('estado', 'aprobada'),
     ]);
     const ords = ordenesRes.data || [];
     setOrdenes(ords);
     setUsuarios(usersRes.data || []);
     setConfig(configRes.data || []);
-    setBecasPendientes(becasPendRes.data || []);
     setBecasActivas(becasActRes.data || []);
 
     const ordenesHoy = ords.filter((o: any) => o.created_at?.startsWith(today)).length;
     const ingresosHoy = ords.filter((o: any) => o.created_at?.startsWith(today) && o.estado !== 'cancelada')
       .reduce((sum: number, o: any) => sum + Number(o.monto_final || 0), 0);
-    setStats({ ordenesHoy, ingresosHoy, becasActivas: becasActRes.data?.length || 0, becasPendientes: becasPendRes.data?.length || 0 });
+    setStats({ ordenesHoy, ingresosHoy, becasActivas: becasActRes.data?.length || 0, totalUsuarios: usersRes.data?.length || 0 });
   }
 
   async function updateOrdenEstado(id: string, estado: string) {
@@ -70,36 +70,96 @@ export default function Admin() {
     else toast.success('Configuración actualizada');
   }
 
-  async function aprobarBeca(becaId: string, tipo: string) {
-    const { error } = await supabase.from('becas').update({
-      estado: 'aprobada' as any, tipo: tipo as any, fecha_inicio: new Date().toISOString().split('T')[0],
-    }).eq('id', becaId);
-    if (error) toast.error(error.message);
-    else { toast.success(`Beca ${tipo}% aprobada`); loadAll(); }
-  }
-
-  async function rechazarBeca(becaId: string) {
-    const { error } = await supabase.from('becas').update({
-      estado: 'rechazada' as any, motivo_revocacion: 'Solicitud rechazada por el administrador',
-    }).eq('id', becaId);
-    if (error) toast.error(error.message);
-    else { toast.success('Beca rechazada'); loadAll(); }
-  }
-
-  async function revocarBeca(becaId: string) {
-    const { error } = await supabase.from('becas').update({
-      estado: 'revocada' as any, motivo_revocacion: 'Revocada por el administrador',
-    }).eq('id', becaId);
-    if (error) toast.error(error.message);
-    else { toast.success('Beca revocada'); loadAll(); }
-  }
-
   function getUserInfo(userId: string) {
     return usuarios.find((u: any) => u.user_id === userId);
   }
   function getUserName(userId: string) {
     const u = getUserInfo(userId);
     return u ? `${u.nombre_completo} (DNI: ${u.dni})` : userId;
+  }
+
+  // Excel upload for bulk user creation
+  async function handleExcelUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploading(true);
+
+    try {
+      const data = await file.arrayBuffer();
+      const wb = XLSX.read(data);
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      const rows: any[] = XLSX.utils.sheet_to_json(ws, { defval: '' });
+
+      if (rows.length === 0) { toast.error('El Excel está vacío'); setUploading(false); return; }
+
+      // Map columns - try to find them flexibly
+      const users = rows.map(row => {
+        const keys = Object.keys(row);
+        const findCol = (patterns: string[]) => {
+          for (const p of patterns) {
+            const found = keys.find(k => k.toLowerCase().replace(/[^a-záéíóú]/g, '').includes(p));
+            if (found) return row[found];
+          }
+          return '';
+        };
+
+        return {
+          dni: (findCol(['dni', 'documento']) || '').toString().trim(),
+          email: (findCol(['correo', 'email', 'mail']) || '').toString().trim().toLowerCase(),
+          apellido: (findCol(['apellido']) || '').toString().trim(),
+          nombre: (findCol(['nombre']) || '').toString().trim(),
+          carrera: (findCol(['carrera']) || '').toString().trim(),
+          porcentaje_beca: (findCol(['porcentaje', 'beca', '%beca']) || '0').toString().trim(),
+        };
+      }).filter(u => u.dni && u.email);
+
+      if (users.length === 0) {
+        toast.error('No se encontraron filas válidas. Verificá las columnas: DNI, CORREO ELECTRONICO, APELLIDO, NOMBRE, CARRERA, PORCENTAJE DE BECA');
+        setUploading(false);
+        return;
+      }
+
+      // Call edge function
+      const { data: result, error } = await supabase.functions.invoke('bulk-create-users', {
+        body: { users },
+      });
+
+      if (error) {
+        toast.error('Error al procesar: ' + error.message);
+      } else if (result) {
+        toast.success(`✅ ${result.created} usuarios creados, ${result.skipped} omitidos (ya existían)`);
+        if (result.errors?.length > 0) {
+          console.warn('Errores:', result.errors);
+          toast.warning(`${result.errors.length} errores. Revisá la consola.`);
+        }
+        loadAll();
+      }
+    } catch (err: any) {
+      toast.error('Error leyendo el archivo: ' + err.message);
+    }
+
+    setUploading(false);
+    e.target.value = '';
+  }
+
+  // Delete all non-admin users and their data
+  async function handleDeleteAll() {
+    setDeleting(true);
+    try {
+      const { data: result, error } = await supabase.functions.invoke('bulk-create-users', {
+        body: { action: 'delete_all' },
+      });
+
+      if (error) {
+        toast.error('Error: ' + error.message);
+      } else if (result) {
+        toast.success(`🗑️ ${result.deleted} usuarios eliminados`);
+        loadAll();
+      }
+    } catch (err: any) {
+      toast.error('Error: ' + err.message);
+    }
+    setDeleting(false);
   }
 
   // Excel export
@@ -124,10 +184,8 @@ export default function Admin() {
       };
     });
     const ws = XLSX.utils.json_to_sheet(rows);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'Balance');
-
-    // Summary sheet
+    const wbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wbook, ws, 'Balance');
     const totalIngresos = rows.reduce((s, r) => s + r['Monto Final'], 0);
     const totalDescuentos = rows.reduce((s, r) => s + r['Descuento Beca'], 0);
     const summaryData = [
@@ -137,13 +195,11 @@ export default function Admin() {
       { Concepto: 'Ingresos netos', Valor: totalIngresos },
     ];
     const ws2 = XLSX.utils.json_to_sheet(summaryData);
-    XLSX.utils.book_append_sheet(wb, ws2, 'Resumen');
-
-    XLSX.writeFile(wb, `balance_cefyl_${new Date().toISOString().split('T')[0]}.xlsx`);
+    XLSX.utils.book_append_sheet(wbook, ws2, 'Resumen');
+    XLSX.writeFile(wbook, `balance_cefyl_${new Date().toISOString().split('T')[0]}.xlsx`);
     toast.success('Excel descargado');
   }
 
-  // Filter orders by date for history
   const filteredOrdenes = ordenes.filter(o => {
     if (fechaDesde && o.created_at < fechaDesde) return false;
     if (fechaHasta && o.created_at > fechaHasta + 'T23:59:59') return false;
@@ -152,7 +208,6 @@ export default function Admin() {
 
   const filteredUsers = searchDni ? usuarios.filter((u: any) => u.dni?.includes(searchDni)) : usuarios;
 
-  // Config grouping for display
   const PRICING_KEYS = ['precio_simple_faz', 'precio_doble_faz', 'precio_color', 'anillado_1_50', 'anillado_51_100', 'anillado_101_plus', 'precio_por_hoja', 'limite_beca_100'];
   const pricingConfig = config.filter(c => PRICING_KEYS.includes(c.clave));
   const otherConfig = config.filter(c => !PRICING_KEYS.includes(c.clave));
@@ -170,19 +225,57 @@ export default function Admin() {
           <Card><CardHeader className="pb-2"><p className="text-sm text-muted-foreground flex items-center gap-1"><FileText className="h-3.5 w-3.5" />Órdenes hoy</p><p className="text-2xl font-bold">{stats.ordenesHoy}</p></CardHeader></Card>
           <Card><CardHeader className="pb-2"><p className="text-sm text-muted-foreground flex items-center gap-1"><DollarSign className="h-3.5 w-3.5" />Ingresos hoy</p><p className="text-2xl font-bold">${stats.ingresosHoy.toLocaleString('es-AR')}</p></CardHeader></Card>
           <Card><CardHeader className="pb-2"><p className="text-sm text-muted-foreground flex items-center gap-1"><GraduationCap className="h-3.5 w-3.5" />Becas activas</p><p className="text-2xl font-bold">{stats.becasActivas}</p></CardHeader></Card>
-          <Card className={stats.becasPendientes > 0 ? 'border-warning' : ''}>
-            <CardHeader className="pb-2"><p className="text-sm text-muted-foreground flex items-center gap-1"><GraduationCap className="h-3.5 w-3.5" />Becas pendientes</p><p className="text-2xl font-bold">{stats.becasPendientes}</p></CardHeader>
-          </Card>
+          <Card><CardHeader className="pb-2"><p className="text-sm text-muted-foreground flex items-center gap-1"><Users className="h-3.5 w-3.5" />Usuarios</p><p className="text-2xl font-bold">{stats.totalUsuarios}</p></CardHeader></Card>
         </div>
+
+        {/* Excel Upload & Data Management */}
+        <Card className="border-primary/30">
+          <CardHeader>
+            <CardTitle className="text-lg flex items-center gap-2"><Upload className="h-5 w-5" /> Carga masiva de usuarios</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <p className="text-sm text-muted-foreground">
+              Subí un Excel con las columnas: <span className="font-medium">DNI, CORREO ELECTRONICO, APELLIDO, NOMBRE, CARRERA, PORCENTAJE DE BECA</span>.
+              El DNI se usará como contraseña. La beca se asigna automáticamente.
+            </p>
+            <div className="flex flex-wrap gap-3">
+              <label className="cursor-pointer">
+                <input type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={handleExcelUpload} disabled={uploading} />
+                <Button asChild variant="default" disabled={uploading} className="gap-2">
+                  <span>{uploading ? <><Loader2 className="h-4 w-4 animate-spin" /> Procesando...</> : <><Upload className="h-4 w-4" /> Cargar Excel</>}</span>
+                </Button>
+              </label>
+
+              <AlertDialog>
+                <AlertDialogTrigger asChild>
+                  <Button variant="destructive" className="gap-2" disabled={deleting}>
+                    <Trash2 className="h-4 w-4" /> Borrar todos los usuarios
+                  </Button>
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>⚠️ ¿Estás seguro?</AlertDialogTitle>
+                    <AlertDialogDescription>
+                      Esto eliminará TODOS los usuarios (excepto administradores), sus órdenes, becas y datos asociados. Esta acción no se puede deshacer.
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                    <AlertDialogAction onClick={handleDeleteAll} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+                      {deleting ? 'Eliminando...' : 'Sí, borrar todo'}
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
+            </div>
+          </CardContent>
+        </Card>
 
         <Tabs defaultValue="ordenes">
           <TabsList>
             <TabsTrigger value="ordenes" className="gap-1"><FileText className="h-3.5 w-3.5" />Órdenes</TabsTrigger>
             <TabsTrigger value="historial" className="gap-1"><History className="h-3.5 w-3.5" />Historial</TabsTrigger>
-            <TabsTrigger value="becas" className="gap-1">
-              <GraduationCap className="h-3.5 w-3.5" />Becas
-              {stats.becasPendientes > 0 && <Badge variant="destructive" className="ml-1 h-5 w-5 p-0 flex items-center justify-center text-xs">{stats.becasPendientes}</Badge>}
-            </TabsTrigger>
+            <TabsTrigger value="becas" className="gap-1"><GraduationCap className="h-3.5 w-3.5" />Becas</TabsTrigger>
             <TabsTrigger value="usuarios" className="gap-1"><Users className="h-3.5 w-3.5" />Usuarios</TabsTrigger>
             <TabsTrigger value="config" className="gap-1"><Settings className="h-3.5 w-3.5" />Precios y Config</TabsTrigger>
           </TabsList>
@@ -285,39 +378,10 @@ export default function Admin() {
             </Card>
           </TabsContent>
 
-          {/* Becas tab */}
-          <TabsContent value="becas" className="mt-4 space-y-4">
+          {/* Becas tab - now read-only, assigned from Excel */}
+          <TabsContent value="becas" className="mt-4">
             <Card>
-              <CardHeader><CardTitle className="text-lg">Solicitudes pendientes</CardTitle></CardHeader>
-              <CardContent>
-                {becasPendientes.length === 0 ? (
-                  <p className="text-center text-muted-foreground py-4">No hay solicitudes pendientes</p>
-                ) : (
-                  <div className="space-y-3">
-                    {becasPendientes.map((b: any) => (
-                      <div key={b.id} className="flex items-center justify-between p-4 rounded-lg border bg-warning/5">
-                        <div>
-                          <p className="font-medium">{getUserName(b.user_id)}</p>
-                          <p className="text-xs text-muted-foreground">Solicitó: <span className="font-medium">{b.tipo}%</span> · {new Date(b.created_at).toLocaleDateString('es-AR')}</p>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <Select onValueChange={(tipo) => aprobarBeca(b.id, tipo)}>
-                            <SelectTrigger className="w-36"><SelectValue placeholder="Aprobar como..." /></SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="50">Aprobar 50%</SelectItem>
-                              <SelectItem value="100">Aprobar 100%</SelectItem>
-                            </SelectContent>
-                          </Select>
-                          <Button variant="destructive" size="icon" onClick={() => rechazarBeca(b.id)} title="Rechazar"><X className="h-4 w-4" /></Button>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-            <Card>
-              <CardHeader><CardTitle className="text-lg">Becas activas</CardTitle></CardHeader>
+              <CardHeader><CardTitle className="text-lg">Becas activas (asignadas por Excel)</CardTitle></CardHeader>
               <CardContent>
                 {becasActivas.length === 0 ? (
                   <p className="text-center text-muted-foreground py-4">No hay becas activas</p>
@@ -329,7 +393,7 @@ export default function Admin() {
                           <p className="font-medium text-sm">{getUserName(b.user_id)}</p>
                           <p className="text-xs text-muted-foreground">Beca {b.tipo}% · Desde: {b.fecha_inicio ? new Date(b.fecha_inicio).toLocaleDateString('es-AR') : '—'}</p>
                         </div>
-                        <Button variant="outline" size="sm" className="text-destructive" onClick={() => revocarBeca(b.id)}>Revocar</Button>
+                        <Badge className="bg-primary/20 text-primary">{b.tipo}%</Badge>
                       </div>
                     ))}
                   </div>
@@ -344,20 +408,24 @@ export default function Admin() {
               <CardHeader><Input placeholder="Buscar por DNI..." value={searchDni} onChange={e => setSearchDni(e.target.value)} className="max-w-xs" /></CardHeader>
               <CardContent>
                 <div className="space-y-2">
-                  {filteredUsers.map((u: any) => (
-                    <div key={u.id} className="flex items-center justify-between p-3 rounded-lg border">
-                      <div>
-                        <p className="font-medium text-sm">{u.nombre_completo}</p>
-                        <p className="text-xs text-muted-foreground">DNI: {u.dni} · {u.carrera} · {u.email}</p>
+                  {filteredUsers.map((u: any) => {
+                    const beca = becasActivas.find((b: any) => b.user_id === u.user_id);
+                    return (
+                      <div key={u.id} className="flex items-center justify-between p-3 rounded-lg border">
+                        <div>
+                          <p className="font-medium text-sm">{u.nombre_completo}</p>
+                          <p className="text-xs text-muted-foreground">DNI: {u.dni} · {u.carrera} · {u.email}</p>
+                        </div>
+                        {beca && <Badge className="bg-primary/20 text-primary">Beca {beca.tipo}%</Badge>}
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </CardContent>
             </Card>
           </TabsContent>
 
-          {/* Config tab - Precios y Config */}
+          {/* Config tab */}
           <TabsContent value="config" className="mt-4 space-y-4">
             <Card>
               <CardHeader><CardTitle className="text-lg">💰 Precios de impresión</CardTitle></CardHeader>
