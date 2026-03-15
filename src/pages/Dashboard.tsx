@@ -31,8 +31,8 @@ export default function Dashboard() {
   const [profile, setProfile] = useState<any>(null);
   const [ordenes, setOrdenes] = useState<any[]>([]);
   const [becaActiva, setBecaActiva] = useState<any>(null);
-  const [becaUso, setBecaUso] = useState(0);
-  const [limiteBeca, setLimiteBeca] = useState(5000);
+  const [becaUso, setBecaUso] = useState(0); // carillas used
+  const [limiteBeca, setLimiteBeca] = useState(500);
 
   useEffect(() => { if (user) loadData(); }, [user]);
 
@@ -49,10 +49,13 @@ export default function Dashboard() {
 
     const cfgMap: Record<string, string> = {};
     configRes.data?.forEach((c: any) => { cfgMap[c.clave] = c.valor; });
-    const limite = Number(cfgMap.limite_beca_100 || 5000);
+
+    const limite = becasRes.data?.tipo === '100'
+      ? Number(cfgMap.limite_beca_100 || 500)
+      : Number(cfgMap.limite_beca_50 || 200);
     setLimiteBeca(limite);
 
-    if (becasRes.data?.tipo === '100') {
+    if (becasRes.data) {
       const now = new Date();
       const usoRes = await supabase.from('beca_uso_mensual').select('monto_usado')
         .eq('user_id', user!.id).eq('mes', now.getMonth() + 1).eq('anio', now.getFullYear()).maybeSingle();
@@ -60,7 +63,7 @@ export default function Dashboard() {
     }
   }
 
-  const saldoDisponible = limiteBeca - becaUso;
+  const carillasDisponibles = Math.max(0, limiteBeca - becaUso);
   const usoPct = limiteBeca > 0 ? Math.min((becaUso / limiteBeca) * 100, 100) : 0;
 
   return (
@@ -92,20 +95,20 @@ export default function Dashboard() {
               <CardTitle className="text-2xl">{becaActiva ? `${becaActiva.tipo}%` : 'Sin beca'}</CardTitle>
             </CardHeader>
           </Card>
-          {becaActiva?.tipo === '100' && (
+          {becaActiva && (
             <Card>
               <CardHeader className="pb-2">
-                <CardDescription className="flex items-center gap-1"><Clock className="h-3.5 w-3.5" /> Saldo beca mensual</CardDescription>
-                <CardTitle className={`text-2xl ${saldoDisponible < 1000 ? 'text-destructive' : 'text-primary'}`}>
-                  ${saldoDisponible.toLocaleString('es-AR')}
+                <CardDescription className="flex items-center gap-1"><Clock className="h-3.5 w-3.5" /> Carillas disponibles</CardDescription>
+                <CardTitle className={`text-2xl ${carillasDisponibles < 50 ? 'text-destructive' : 'text-primary'}`}>
+                  {carillasDisponibles}
                 </CardTitle>
               </CardHeader>
               <CardContent className="pt-0 space-y-2">
                 <Progress value={usoPct} className="h-2" />
                 <p className="text-xs text-muted-foreground">
-                  Usaste ${becaUso.toLocaleString('es-AR')} de ${limiteBeca.toLocaleString('es-AR')}
+                  Usaste {becaUso} de {limiteBeca} carillas
                 </p>
-                {saldoDisponible < 1000 && <p className="text-xs text-destructive">⚠️ Te queda poco saldo este mes</p>}
+                {carillasDisponibles < 50 && <p className="text-xs text-destructive">⚠️ Te quedan pocas carillas este mes</p>}
               </CardContent>
             </Card>
           )}
@@ -119,7 +122,7 @@ export default function Dashboard() {
               <p className="font-bold text-sm text-primary">🌱 ¡Usá tu beca a conciencia!</p>
               <p className="text-xs text-muted-foreground">
                 Tu beca es un recurso compartido. Imprimí solo lo necesario para cuidar el medio ambiente y que más compañeros puedan beneficiarse.
-                {becaActiva.tipo === '100' && ` Te quedan $${saldoDisponible.toLocaleString('es-AR')} este mes.`}
+                {` Te quedan ${carillasDisponibles} carillas este mes.`}
               </p>
             </div>
           </div>
@@ -136,21 +139,16 @@ export default function Dashboard() {
                 <Badge className="bg-primary/20 text-primary">Activa</Badge>
                 <span className="font-medium">Beca del {becaActiva.tipo}%</span>
               </div>
-              {becaActiva.tipo === '100' && (
-                <div className="mt-3 p-3 rounded-lg bg-muted">
-                  <div className="flex justify-between text-sm mb-1">
-                    <span>Consumo mensual</span>
-                    <span className="font-medium">${becaUso.toLocaleString('es-AR')} / ${limiteBeca.toLocaleString('es-AR')}</span>
-                  </div>
-                  <Progress value={usoPct} className="h-2" />
-                  <p className="text-xs text-muted-foreground mt-1">
-                    Disponible: <span className={`font-bold ${saldoDisponible < 1000 ? 'text-destructive' : 'text-primary'}`}>${saldoDisponible.toLocaleString('es-AR')}</span>
-                  </p>
+              <div className="mt-3 p-3 rounded-lg bg-muted">
+                <div className="flex justify-between text-sm mb-1">
+                  <span>Consumo mensual de carillas</span>
+                  <span className="font-medium">{becaUso} / {limiteBeca}</span>
                 </div>
-              )}
-              {becaActiva.tipo === '50' && (
-                <p className="text-sm text-muted-foreground mt-2">Tenés un 50% de descuento en todas tus impresiones.</p>
-              )}
+                <Progress value={usoPct} className="h-2" />
+                <p className="text-xs text-muted-foreground mt-1">
+                  Disponible: <span className={`font-bold ${carillasDisponibles < 50 ? 'text-destructive' : 'text-primary'}`}>{carillasDisponibles} carillas</span>
+                </p>
+              </div>
             </CardContent>
           </Card>
         )}
@@ -172,9 +170,9 @@ export default function Dashboard() {
                       <div>
                         <p className="font-medium text-sm">{o.archivo_nombre}</p>
                         <p className="text-xs text-muted-foreground">
-                          {o.cantidad_hojas} hojas · ${Number(o.monto_final).toLocaleString('es-AR')}
+                          {o.cantidad_paginas} carillas · {o.cantidad_hojas} hojas · ${Number(o.monto_final).toLocaleString('es-AR')}
                           {o.color && ' · Color'}
-                          {o.doble_faz && ' · Doble faz'}
+                          {!o.doble_faz && ' · Simple faz'}
                           {o.anillado && ' · Anillado'}
                           {o.usar_beca && ' · 🎓 Beca'}
                         </p>

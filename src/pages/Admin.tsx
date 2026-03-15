@@ -5,11 +5,13 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter, DialogClose } from '@/components/ui/dialog';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Users, FileText, DollarSign, Settings, GraduationCap, Download, History, Upload, Trash2, Loader2 } from 'lucide-react';
+import { ArrowLeft, Users, FileText, DollarSign, Settings, GraduationCap, Download, History, Upload, Trash2, Loader2, Minus } from 'lucide-react';
 import { toast } from 'sonner';
 import * as XLSX from 'xlsx';
 
@@ -26,12 +28,18 @@ export default function Admin() {
   const [usuarios, setUsuarios] = useState<any[]>([]);
   const [config, setConfig] = useState<any[]>([]);
   const [becasActivas, setBecasActivas] = useState<any[]>([]);
+  const [becaUsos, setBecaUsos] = useState<any[]>([]);
   const [searchDni, setSearchDni] = useState('');
   const [stats, setStats] = useState({ ordenesHoy: 0, ingresosHoy: 0, becasActivas: 0, totalUsuarios: 0 });
   const [fechaDesde, setFechaDesde] = useState('');
   const [fechaHasta, setFechaHasta] = useState('');
   const [uploading, setUploading] = useState(false);
   const [deleting, setDeleting] = useState(false);
+
+  // Manual deduction state
+  const [deductUserId, setDeductUserId] = useState('');
+  const [deductCarillas, setDeductCarillas] = useState('');
+  const [deducting, setDeducting] = useState(false);
 
   useEffect(() => {
     if (!isAdmin) { navigate('/dashboard'); return; }
@@ -40,17 +48,20 @@ export default function Admin() {
 
   async function loadAll() {
     const today = new Date().toISOString().split('T')[0];
-    const [ordenesRes, usersRes, configRes, becasActRes] = await Promise.all([
+    const now = new Date();
+    const [ordenesRes, usersRes, configRes, becasActRes, usoRes] = await Promise.all([
       supabase.from('ordenes').select('*').order('created_at', { ascending: false }).limit(200),
       supabase.from('profiles').select('*').order('created_at', { ascending: false }),
       supabase.from('configuraciones').select('*'),
       supabase.from('becas').select('*').eq('estado', 'aprobada'),
+      supabase.from('beca_uso_mensual').select('*').eq('mes', now.getMonth() + 1).eq('anio', now.getFullYear()),
     ]);
     const ords = ordenesRes.data || [];
     setOrdenes(ords);
     setUsuarios(usersRes.data || []);
     setConfig(configRes.data || []);
     setBecasActivas(becasActRes.data || []);
+    setBecaUsos(usoRes.data || []);
 
     const ordenesHoy = ords.filter((o: any) => o.created_at?.startsWith(today)).length;
     const ingresosHoy = ords.filter((o: any) => o.created_at?.startsWith(today) && o.estado !== 'cancelada')
@@ -77,6 +88,46 @@ export default function Admin() {
     const u = getUserInfo(userId);
     return u ? `${u.nombre_completo} (DNI: ${u.dni})` : userId;
   }
+  function getUserUso(userId: string) {
+    const uso = becaUsos.find((u: any) => u.user_id === userId);
+    return Number(uso?.monto_usado || 0);
+  }
+
+  // Manual carilla deduction
+  async function handleDeductCarillas() {
+    if (!deductUserId || !deductCarillas || Number(deductCarillas) <= 0) {
+      toast.error('Seleccioná un usuario e ingresá la cantidad de carillas');
+      return;
+    }
+    setDeducting(true);
+    try {
+      const now = new Date();
+      const mes = now.getMonth() + 1;
+      const anio = now.getFullYear();
+      const cantidad = Number(deductCarillas);
+
+      const { data: existing } = await supabase.from('beca_uso_mensual')
+        .select('*').eq('user_id', deductUserId).eq('mes', mes).eq('anio', anio).maybeSingle();
+
+      if (existing) {
+        await supabase.from('beca_uso_mensual').update({
+          monto_usado: Number(existing.monto_usado || 0) + cantidad
+        }).eq('id', existing.id);
+      } else {
+        await supabase.from('beca_uso_mensual').insert({
+          user_id: deductUserId, mes, anio, monto_usado: cantidad
+        });
+      }
+
+      toast.success(`✅ ${cantidad} carillas descontadas`);
+      setDeductCarillas('');
+      setDeductUserId('');
+      loadAll();
+    } catch (err: any) {
+      toast.error(err.message);
+    }
+    setDeducting(false);
+  }
 
   // Excel upload for bulk user creation
   async function handleExcelUpload(e: React.ChangeEvent<HTMLInputElement>) {
@@ -92,7 +143,6 @@ export default function Admin() {
 
       if (rows.length === 0) { toast.error('El Excel está vacío'); setUploading(false); return; }
 
-      // Map columns - try to find them flexibly
       const users = rows.map(row => {
         const keys = Object.keys(row);
         const findCol = (patterns: string[]) => {
@@ -119,7 +169,6 @@ export default function Admin() {
         return;
       }
 
-      // Call edge function
       const { data: result, error } = await supabase.functions.invoke('bulk-create-users', {
         body: { users },
       });
@@ -172,6 +221,7 @@ export default function Admin() {
         DNI: u?.dni || '',
         Carrera: u?.carrera || '',
         Archivo: o.archivo_nombre,
+        Carillas: o.cantidad_paginas,
         Hojas: o.cantidad_hojas,
         'Doble Faz': o.doble_faz ? 'Sí' : 'No',
         Color: o.color ? 'Sí' : 'No',
@@ -208,9 +258,19 @@ export default function Admin() {
 
   const filteredUsers = searchDni ? usuarios.filter((u: any) => u.dni?.includes(searchDni)) : usuarios;
 
-  const PRICING_KEYS = ['precio_simple_faz', 'precio_doble_faz', 'precio_color', 'anillado_1_50', 'anillado_51_100', 'anillado_101_plus', 'precio_por_hoja', 'limite_beca_100'];
+  const PRICING_KEYS = ['precio_simple_faz', 'precio_doble_faz', 'precio_color', 'anillado_1_50', 'anillado_51_100', 'anillado_101_plus', 'limite_beca_50', 'limite_beca_100'];
   const pricingConfig = config.filter(c => PRICING_KEYS.includes(c.clave));
   const otherConfig = config.filter(c => !PRICING_KEYS.includes(c.clave));
+
+  // Users with active beca for the deduction selector
+  const becaUsers = becasActivas.map(b => {
+    const u = getUserInfo(b.user_id);
+    const uso = getUserUso(b.user_id);
+    const cfgMap: Record<string, number> = {};
+    config.forEach((c: any) => { cfgMap[c.clave] = Number(c.valor); });
+    const limite = b.tipo === '100' ? (cfgMap.limite_beca_100 || 500) : (cfgMap.limite_beca_50 || 200);
+    return { ...b, nombre: u?.nombre_completo || '', dni: u?.dni || '', uso, limite, disponible: Math.max(0, limite - uso) };
+  });
 
   return (
     <div className="min-h-screen bg-background">
@@ -296,7 +356,7 @@ export default function Admin() {
                       <div>
                         <p className="font-medium text-sm">{o.archivo_nombre}</p>
                         <p className="text-xs text-muted-foreground">
-                          {getUserName(o.user_id)} · {o.cantidad_hojas} hojas · ${Number(o.monto_final).toLocaleString('es-AR')}
+                          {getUserName(o.user_id)} · {o.cantidad_paginas} carillas · {o.cantidad_hojas} hojas · ${Number(o.monto_final).toLocaleString('es-AR')}
                           {o.color && ' · Color'}{o.anillado && ' · Anillado'}{o.usar_beca && ' · 🎓'}
                         </p>
                       </div>
@@ -340,6 +400,7 @@ export default function Admin() {
                         <th className="text-left py-2 px-2 font-medium text-muted-foreground">DNI</th>
                         <th className="text-left py-2 px-2 font-medium text-muted-foreground">Carrera</th>
                         <th className="text-left py-2 px-2 font-medium text-muted-foreground">Archivo</th>
+                        <th className="text-right py-2 px-2 font-medium text-muted-foreground">Carillas</th>
                         <th className="text-right py-2 px-2 font-medium text-muted-foreground">Hojas</th>
                         <th className="text-left py-2 px-2 font-medium text-muted-foreground">Opciones</th>
                         <th className="text-right py-2 px-2 font-medium text-muted-foreground">Monto</th>
@@ -356,9 +417,11 @@ export default function Admin() {
                             <td className="py-2 px-2">{u?.dni || '—'}</td>
                             <td className="py-2 px-2">{u?.carrera || '—'}</td>
                             <td className="py-2 px-2 max-w-32 truncate">{o.archivo_nombre}</td>
+                            <td className="py-2 px-2 text-right">{o.cantidad_paginas}</td>
                             <td className="py-2 px-2 text-right">{o.cantidad_hojas}</td>
                             <td className="py-2 px-2">
                               <div className="flex gap-1">
+                                {!o.doble_faz && <Badge variant="outline" className="text-xs">1F</Badge>}
                                 {o.doble_faz && <Badge variant="outline" className="text-xs">2F</Badge>}
                                 {o.color && <Badge variant="outline" className="text-xs">Color</Badge>}
                                 {o.anillado && <Badge variant="outline" className="text-xs">Anil.</Badge>}
@@ -378,22 +441,59 @@ export default function Admin() {
             </Card>
           </TabsContent>
 
-          {/* Becas tab - now read-only, assigned from Excel */}
-          <TabsContent value="becas" className="mt-4">
+          {/* Becas tab - with manual deduction */}
+          <TabsContent value="becas" className="mt-4 space-y-4">
+            {/* Manual deduction card */}
+            <Card className="border-primary/30">
+              <CardHeader>
+                <CardTitle className="text-lg flex items-center gap-2"><Minus className="h-5 w-5" /> Descontar carillas (compra presencial)</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <p className="text-sm text-muted-foreground">
+                  Si un alumno compró en persona y usó su beca, descontale las carillas manualmente acá.
+                </p>
+                <div className="flex flex-wrap gap-3 items-end">
+                  <div className="space-y-1 flex-1 min-w-48">
+                    <Label className="text-xs">Alumno</Label>
+                    <Select value={deductUserId} onValueChange={setDeductUserId}>
+                      <SelectTrigger><SelectValue placeholder="Seleccionar alumno..." /></SelectTrigger>
+                      <SelectContent>
+                        {becaUsers.map(bu => (
+                          <SelectItem key={bu.user_id} value={bu.user_id}>
+                            {bu.nombre} (DNI: {bu.dni}) — Beca {bu.tipo}% — Disponible: {bu.disponible} carillas
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-1 w-32">
+                    <Label className="text-xs">Carillas</Label>
+                    <Input type="number" min="1" value={deductCarillas} onChange={e => setDeductCarillas(e.target.value)} placeholder="Cant." />
+                  </div>
+                  <Button onClick={handleDeductCarillas} disabled={deducting} className="gap-2">
+                    {deducting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Minus className="h-4 w-4" />}
+                    Descontar
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+
             <Card>
-              <CardHeader><CardTitle className="text-lg">Becas activas (asignadas por Excel)</CardTitle></CardHeader>
+              <CardHeader><CardTitle className="text-lg">Becas activas</CardTitle></CardHeader>
               <CardContent>
-                {becasActivas.length === 0 ? (
+                {becaUsers.length === 0 ? (
                   <p className="text-center text-muted-foreground py-4">No hay becas activas</p>
                 ) : (
                   <div className="space-y-2">
-                    {becasActivas.map((b: any) => (
-                      <div key={b.id} className="flex items-center justify-between p-3 rounded-lg border">
+                    {becaUsers.map((bu: any) => (
+                      <div key={bu.id} className="flex items-center justify-between p-3 rounded-lg border">
                         <div>
-                          <p className="font-medium text-sm">{getUserName(b.user_id)}</p>
-                          <p className="text-xs text-muted-foreground">Beca {b.tipo}% · Desde: {b.fecha_inicio ? new Date(b.fecha_inicio).toLocaleDateString('es-AR') : '—'}</p>
+                          <p className="font-medium text-sm">{bu.nombre} (DNI: {bu.dni})</p>
+                          <p className="text-xs text-muted-foreground">
+                            Beca {bu.tipo}% · Usadas: {bu.uso}/{bu.limite} carillas · Disponible: <span className={bu.disponible < 50 ? 'text-destructive font-bold' : 'text-primary font-bold'}>{bu.disponible}</span>
+                          </p>
                         </div>
-                        <Badge className="bg-primary/20 text-primary">{b.tipo}%</Badge>
+                        <Badge className="bg-primary/20 text-primary">{bu.tipo}%</Badge>
                       </div>
                     ))}
                   </div>
@@ -428,20 +528,23 @@ export default function Admin() {
           {/* Config tab */}
           <TabsContent value="config" className="mt-4 space-y-4">
             <Card>
-              <CardHeader><CardTitle className="text-lg">💰 Precios de impresión</CardTitle></CardHeader>
+              <CardHeader><CardTitle className="text-lg">💰 Precios y límites de becas</CardTitle></CardHeader>
               <CardContent className="space-y-4">
-                {pricingConfig.map((c: any) => (
-                  <div key={c.id} className="flex items-center gap-4">
-                    <div className="flex-1">
-                      <p className="font-medium text-sm">{c.descripcion || c.clave}</p>
-                      <p className="text-xs text-muted-foreground">{c.clave}</p>
+                {pricingConfig.map((c: any) => {
+                  const isCarillas = c.clave.startsWith('limite_beca');
+                  return (
+                    <div key={c.id} className="flex items-center gap-4">
+                      <div className="flex-1">
+                        <p className="font-medium text-sm">{c.descripcion || c.clave}</p>
+                        <p className="text-xs text-muted-foreground">{c.clave}</p>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <span className="text-sm text-muted-foreground">{isCarillas ? 'carillas' : '$'}</span>
+                        <Input className="w-28" defaultValue={c.valor} onBlur={e => updateConfig(c.clave, e.target.value)} />
+                      </div>
                     </div>
-                    <div className="flex items-center gap-1">
-                      <span className="text-sm text-muted-foreground">$</span>
-                      <Input className="w-28" defaultValue={c.valor} onBlur={e => updateConfig(c.clave, e.target.value)} />
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
               </CardContent>
             </Card>
             {otherConfig.length > 0 && (

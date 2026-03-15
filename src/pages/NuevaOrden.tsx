@@ -22,15 +22,17 @@ export default function NuevaOrden() {
   const { user } = useAuth();
   const navigate = useNavigate();
   const [files, setFiles] = useState<FileEntry[]>([]);
-  const [dobleFaz, setDobleFaz] = useState(false);
+  const [simpleFaz, setSimpleFaz] = useState(false); // default is doble faz
   const [color, setColor] = useState(false);
   const [anillado, setAnillado] = useState(false);
   const [comentarios, setComentarios] = useState('');
   const [loading, setLoading] = useState(false);
   const [config, setConfig] = useState<Record<string, number>>({});
   const [beca, setBeca] = useState<any>(null);
-  const [becaUso, setBecaUso] = useState(0);
-  const [limiteBeca, setLimiteBeca] = useState(5000);
+  const [becaUso, setBecaUso] = useState(0); // carillas used this month
+  const [limiteBeca, setLimiteBeca] = useState(500);
+
+  const dobleFaz = !simpleFaz;
 
   useEffect(() => { if (user) loadConfig(); }, [user]);
 
@@ -43,9 +45,13 @@ export default function NuevaOrden() {
     configRes.data?.forEach((c: any) => { cfgMap[c.clave] = Number(c.valor); });
     setConfig(cfgMap);
     setBeca(becaRes.data);
-    setLimiteBeca(cfgMap.limite_beca_100 || 5000);
 
-    if (becaRes.data?.tipo === '100') {
+    const limite = becaRes.data?.tipo === '100'
+      ? (cfgMap.limite_beca_100 || 500)
+      : (cfgMap.limite_beca_50 || 200);
+    setLimiteBeca(limite);
+
+    if (becaRes.data) {
       const now = new Date();
       const usoRes = await supabase.from('beca_uso_mensual').select('monto_usado')
         .eq('user_id', user!.id).eq('mes', now.getMonth() + 1).eq('anio', now.getFullYear()).maybeSingle();
@@ -81,15 +87,29 @@ export default function NuevaOrden() {
     return config.anillado_101_plus || 1200;
   }
 
+  // carillas = pages (each page prints on one side)
+  // hojas: simple faz = 1 page per sheet, doble faz = 2 pages per sheet
   function calcFilePrice(f: FileEntry) {
-    const hojas = dobleFaz ? Math.ceil(f.estimatedPages / 2) : f.estimatedPages;
+    const carillas = f.estimatedPages; // each page = 1 carilla
+    const hojas = dobleFaz ? Math.ceil(carillas / 2) : carillas;
     const precioPorHoja = dobleFaz ? precioDoble : precioSimple;
     let base = hojas * precioPorHoja;
     if (color) base += hojas * precioColor;
     if (anillado) base += getAnilladoPrice(hojas);
-    const descPct = f.usarBeca && beca ? (beca.tipo === '100' ? 100 : beca.tipo === '50' ? 50 : 0) : 0;
-    const descuento = base * (descPct / 100);
-    return { hojas, base, descPct, descuento, final: base - descuento };
+
+    // Beca: discount based on carillas within limit
+    let carillasConBeca = 0;
+    let descuento = 0;
+    if (f.usarBeca && beca) {
+      const carillasDisponibles = Math.max(0, limiteBeca - becaUso);
+      carillasConBeca = Math.min(carillas, carillasDisponibles);
+      const descPct = beca.tipo === '100' ? 100 : beca.tipo === '50' ? 50 : 0;
+      // Price per carilla
+      const precioPorCarilla = base / carillas;
+      descuento = carillasConBeca * precioPorCarilla * (descPct / 100);
+    }
+
+    return { carillas, hojas, base, descuento, carillasConBeca, final: base - descuento };
   }
 
   const totals = files.map(calcFilePrice);
@@ -97,7 +117,9 @@ export default function NuevaOrden() {
   const totalBase = totals.reduce((s, t) => s + t.base, 0);
   const totalDescuento = totals.reduce((s, t) => s + t.descuento, 0);
   const totalHojas = totals.reduce((s, t) => s + t.hojas, 0);
-  const saldoDisponible = beca?.tipo === '100' ? limiteBeca - becaUso : null;
+  const totalCarillas = totals.reduce((s, t) => s + t.carillas, 0);
+  const totalCarillasBeca = totals.reduce((s, t) => s + t.carillasConBeca, 0);
+  const carillasDisponibles = Math.max(0, limiteBeca - becaUso);
 
   const handleSubmit = async () => {
     if (files.length === 0 || !user) return;
@@ -105,7 +127,7 @@ export default function NuevaOrden() {
     try {
       for (let i = 0; i < files.length; i++) {
         const { file, estimatedPages, usarBeca } = files[i];
-        const { hojas, base, descuento, final: montoFinal, descPct } = totals[i];
+        const { hojas, base, descuento, final: montoFinal, carillasConBeca } = totals[i];
         const filePath = `${user.id}/${Date.now()}_${file.name}`;
         const { error: uploadError } = await supabase.storage.from('print-files').upload(filePath, file);
         if (uploadError) throw new Error(`Error subiendo "${file.name}": ${uploadError.message}`);
@@ -127,6 +149,26 @@ export default function NuevaOrden() {
           estado: 'pendiente_pago',
         });
         if (orderError) throw new Error(`Error creando orden para "${file.name}": ${orderError.message}`);
+
+        // Update beca usage (carillas)
+        if (usarBeca && beca && carillasConBeca > 0) {
+          const now = new Date();
+          const mes = now.getMonth() + 1;
+          const anio = now.getFullYear();
+          const { data: existing } = await supabase.from('beca_uso_mensual')
+            .select('*').eq('user_id', user.id).eq('mes', mes).eq('anio', anio).maybeSingle();
+
+          if (existing) {
+            await supabase.from('beca_uso_mensual').update({
+              monto_usado: Number(existing.monto_usado || 0) + carillasConBeca
+            }).eq('id', existing.id);
+          } else {
+            await supabase.from('beca_uso_mensual').insert({
+              user_id: user.id, mes, anio, monto_usado: carillasConBeca
+            });
+          }
+          setBecaUso(prev => prev + carillasConBeca);
+        }
       }
       toast.success(`¡${files.length > 1 ? `${files.length} órdenes creadas` : 'Orden creada'} exitosamente!`);
       navigate('/dashboard');
@@ -158,11 +200,9 @@ export default function NuevaOrden() {
               <p className="text-xs text-muted-foreground mt-1">
                 Tu beca del {beca.tipo}% es un recurso compartido. Imprimí solo lo necesario para cuidar el medio ambiente y que más compañeros puedan beneficiarse.
               </p>
-              {saldoDisponible !== null && (
-                <p className="text-xs font-medium mt-1">
-                  Saldo disponible este mes: <span className={saldoDisponible < 1000 ? 'text-destructive' : 'text-primary'}>${saldoDisponible.toLocaleString('es-AR')}</span>
-                </p>
-              )}
+              <p className="text-xs font-medium mt-1">
+                Carillas disponibles este mes: <span className={carillasDisponibles < 50 ? 'text-destructive' : 'text-primary'}>{carillasDisponibles} de {limiteBeca}</span>
+              </p>
             </div>
           </div>
         )}
@@ -194,7 +234,9 @@ export default function NuevaOrden() {
                       <FileText className="h-5 w-5 text-primary shrink-0" />
                       <div className="min-w-0">
                         <p className="font-medium text-sm truncate">{f.file.name}</p>
-                        <p className="text-xs text-muted-foreground">{formatSize(f.file.size)} · ~{f.estimatedPages} pág · {totals[i]?.hojas} hojas · ${totals[i]?.final.toLocaleString('es-AR')}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {formatSize(f.file.size)} · ~{f.estimatedPages} carillas · {totals[i]?.hojas} hojas · ${totals[i]?.final.toLocaleString('es-AR')}
+                        </p>
                       </div>
                     </div>
                     <div className="flex items-center gap-2 shrink-0">
@@ -213,11 +255,11 @@ export default function NuevaOrden() {
               </div>
             )}
 
-            {/* Options */}
+            {/* Options - default is doble faz */}
             <div className="grid grid-cols-2 gap-4">
               <div className="flex items-center justify-between p-3 rounded-lg border">
-                <Label>Doble faz</Label>
-                <Switch checked={dobleFaz} onCheckedChange={setDobleFaz} />
+                <Label>Simple faz</Label>
+                <Switch checked={simpleFaz} onCheckedChange={setSimpleFaz} />
               </div>
               <div className="flex items-center justify-between p-3 rounded-lg border">
                 <Label>Color</Label>
@@ -243,7 +285,7 @@ export default function NuevaOrden() {
             {files.length > 0 && (
               <div className="rounded-lg bg-muted p-4 space-y-2">
                 <div className="flex justify-between text-sm">
-                  <span>Hojas totales: {totalHojas}</span>
+                  <span>Carillas totales: {totalCarillas} · Hojas: {totalHojas}</span>
                   <span>{dobleFaz ? 'Doble faz' : 'Simple faz'} · ${(dobleFaz ? precioDoble : precioSimple)}/hoja{color ? ` + $${precioColor}/color` : ''}</span>
                 </div>
                 <div className="flex justify-between text-sm">
@@ -251,10 +293,12 @@ export default function NuevaOrden() {
                   <span>${totalBase.toLocaleString('es-AR')}</span>
                 </div>
                 {totalDescuento > 0 && (
-                  <div className="flex justify-between text-sm text-primary">
-                    <span>Descuento beca</span>
-                    <span>-${totalDescuento.toLocaleString('es-AR')}</span>
-                  </div>
+                  <>
+                    <div className="flex justify-between text-sm text-primary">
+                      <span>Descuento beca ({totalCarillasBeca} carillas cubiertas)</span>
+                      <span>-${totalDescuento.toLocaleString('es-AR')}</span>
+                    </div>
+                  </>
                 )}
                 <div className="flex justify-between font-bold text-lg border-t pt-2">
                   <span>Total</span>
