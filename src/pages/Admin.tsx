@@ -81,6 +81,22 @@ export default function Admin() {
     else toast.success('Configuración actualizada');
   }
 
+  async function handleDownloadFile(archivoUrl: string, archivoNombre: string) {
+    try {
+      const { data, error } = await supabase.storage.from('print-files').download(archivoUrl);
+      if (error) { toast.error('Error descargando archivo: ' + error.message); return; }
+      const url = URL.createObjectURL(data);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = archivoNombre;
+      a.click();
+      URL.revokeObjectURL(url);
+      toast.success('Archivo descargado');
+    } catch (err: any) {
+      toast.error('Error: ' + err.message);
+    }
+  }
+
   function getUserInfo(userId: string) {
     return usuarios.find((u: any) => u.user_id === userId);
   }
