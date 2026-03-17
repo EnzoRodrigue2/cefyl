@@ -1,1 +1,7 @@
 project_id = "nwmwmpwrnvqcxakwhjjk"
+
+[functions.create-mp-preference]
+verify_jwt = false
+
+[functions.bulk-create-users]
+verify_jwt = false

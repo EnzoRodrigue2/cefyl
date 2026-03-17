@@ -125,6 +125,7 @@ export default function NuevaOrden() {
     if (files.length === 0 || !user) return;
     setLoading(true);
     try {
+      const createdOrderIds: string[] = [];
       for (let i = 0; i < files.length; i++) {
         const { file, estimatedPages, usarBeca } = files[i];
         const { hojas, base, descuento, final: montoFinal, carillasConBeca } = totals[i];
@@ -132,7 +133,7 @@ export default function NuevaOrden() {
         const { error: uploadError } = await supabase.storage.from('print-files').upload(filePath, file);
         if (uploadError) throw new Error(`Error subiendo "${file.name}": ${uploadError.message}`);
 
-        const { error: orderError } = await supabase.from('ordenes').insert({
+        const { data: orderData, error: orderError } = await supabase.from('ordenes').insert({
           user_id: user.id,
           archivo_url: filePath,
           archivo_nombre: file.name,
@@ -147,8 +148,9 @@ export default function NuevaOrden() {
           descuento_beca: descuento,
           monto_final: montoFinal,
           estado: 'pendiente_pago',
-        });
+        }).select('id').single();
         if (orderError) throw new Error(`Error creando orden para "${file.name}": ${orderError.message}`);
+        createdOrderIds.push(orderData.id);
 
         // Update beca usage (carillas)
         if (usarBeca && beca && carillasConBeca > 0) {
@@ -170,8 +172,26 @@ export default function NuevaOrden() {
           setBecaUso(prev => prev + carillasConBeca);
         }
       }
-      toast.success(`¡${files.length > 1 ? `${files.length} órdenes creadas` : 'Orden creada'} exitosamente!`);
-      navigate('/dashboard');
+
+      // If total > 0, redirect to Mercado Pago
+      if (totalFinal > 0) {
+        toast.info('Redirigiendo a Mercado Pago...');
+        const { data: mpData, error: mpError } = await supabase.functions.invoke('create-mp-preference', {
+          body: {
+            orden_ids: createdOrderIds,
+            back_url: window.location.origin + '/dashboard',
+          },
+        });
+        if (mpError || !mpData?.init_point) {
+          toast.error('Error al generar el pago. Podés pagar desde tu dashboard.');
+          navigate('/dashboard');
+        } else {
+          window.location.href = mpData.init_point;
+        }
+      } else {
+        toast.success(`¡${files.length > 1 ? `${files.length} órdenes creadas` : 'Orden creada'} exitosamente! Beca cubrió el total.`);
+        navigate('/dashboard');
+      }
     } catch (err: any) {
       toast.error(err.message || 'Error al crear la orden');
     }
@@ -309,7 +329,7 @@ export default function NuevaOrden() {
             )}
 
             <Button onClick={handleSubmit} disabled={files.length === 0 || loading} className="w-full">
-              {loading ? 'Creando...' : files.length > 1 ? `Crear ${files.length} órdenes` : 'Crear orden'}
+              {loading ? 'Procesando...' : totalFinal > 0 ? `Pagar $${totalFinal.toLocaleString('es-AR')} con Mercado Pago` : 'Crear orden (cubierta por beca)'}
             </Button>
           </CardContent>
         </Card>
