@@ -329,7 +329,7 @@ export default function NuevaOrden() {
             )}
 
             <Button onClick={handleSubmit} disabled={files.length === 0 || loading} className="w-full">
-              {loading ? 'Creando...' : files.length > 1 ? `Crear ${files.length} órdenes` : 'Crear orden'}
+              {loading ? 'Procesando...' : totalFinal > 0 ? `Pagar $${totalFinal.toLocaleString('es-AR')} con Mercado Pago` : 'Crear orden (cubierta por beca)'}
             </Button>
           </CardContent>
         </Card>
