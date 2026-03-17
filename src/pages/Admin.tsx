@@ -353,19 +353,25 @@ export default function Admin() {
                 <div className="space-y-3">
                   {ordenes.slice(0, 50).map(o => (
                     <div key={o.id} className="flex items-center justify-between p-3 rounded-lg border">
-                      <div>
+                      <div className="flex-1 min-w-0">
                         <p className="font-medium text-sm">{o.archivo_nombre}</p>
                         <p className="text-xs text-muted-foreground">
                           {getUserName(o.user_id)} · {o.cantidad_paginas} carillas · {o.cantidad_hojas} hojas · ${Number(o.monto_final).toLocaleString('es-AR')}
                           {o.color && ' · Color'}{o.anillado && ' · Anillado'}{o.usar_beca && ' · 🎓'}
+                          {o.doble_faz ? ' · 2F' : ' · 1F'}
                         </p>
                       </div>
-                      <Select value={o.estado} onValueChange={(v) => updateOrdenEstado(o.id, v)}>
-                        <SelectTrigger className="w-44"><SelectValue /></SelectTrigger>
-                        <SelectContent>
-                          {Object.entries(ESTADO_LABELS).map(([k, v]) => <SelectItem key={k} value={k}>{v}</SelectItem>)}
-                        </SelectContent>
-                      </Select>
+                      <div className="flex items-center gap-2">
+                        <Button variant="outline" size="sm" className="gap-1" onClick={() => handleDownloadFile(o.archivo_url, o.archivo_nombre)}>
+                          <Download className="h-3.5 w-3.5" /> PDF
+                        </Button>
+                        <Select value={o.estado} onValueChange={(v) => updateOrdenEstado(o.id, v)}>
+                          <SelectTrigger className="w-44"><SelectValue /></SelectTrigger>
+                          <SelectContent>
+                            {Object.entries(ESTADO_LABELS).map(([k, v]) => <SelectItem key={k} value={k}>{v}</SelectItem>)}
+                          </SelectContent>
+                        </Select>
+                      </div>
                     </div>
                   ))}
                   {ordenes.length === 0 && <p className="text-center text-muted-foreground py-8">No hay órdenes</p>}
