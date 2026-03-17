@@ -62,7 +62,7 @@ export default function NuevaOrden() {
     }
   }
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFiles = e.target.files;
     if (!selectedFiles) return;
     const newFiles: FileEntry[] = [];
@@ -71,7 +71,19 @@ export default function NuevaOrden() {
       if (f.type !== 'application/pdf') { toast.error(`"${f.name}" no es un PDF.`); continue; }
       if (f.size > 1024 * 1024 * 1024) { toast.error(`"${f.name}" supera 1GB`); continue; }
       if (files.some(fe => fe.file.name === f.name && fe.file.size === f.size)) { toast.error(`"${f.name}" ya fue agregado`); continue; }
-      newFiles.push({ file: f, estimatedPages: Math.max(1, Math.round(f.size / 40000)), usarBeca: !!beca });
+      
+      // Count actual PDF pages
+      let pageCount = 1;
+      try {
+        const arrayBuffer = await f.arrayBuffer();
+        const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+        pageCount = pdf.numPages;
+      } catch (err) {
+        console.warn(`No se pudo leer páginas de "${f.name}", usando estimación`, err);
+        pageCount = Math.max(1, Math.round(f.size / 40000));
+      }
+      
+      newFiles.push({ file: f, estimatedPages: pageCount, usarBeca: !!beca });
     }
     if (newFiles.length > 0) setFiles(prev => [...prev, ...newFiles]);
     e.target.value = '';
