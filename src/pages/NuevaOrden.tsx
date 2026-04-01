@@ -167,25 +167,7 @@ export default function NuevaOrden() {
         if (orderError) throw new Error(`Error creando orden para "${file.name}": ${orderError.message}`);
         createdOrderIds.push(orderData.id);
 
-        // Update beca usage (carillas)
-        if (usarBeca && beca && carillasConBeca > 0) {
-          const now = new Date();
-          const mes = now.getMonth() + 1;
-          const anio = now.getFullYear();
-          const { data: existing } = await supabase.from('beca_uso_mensual')
-            .select('*').eq('user_id', user.id).eq('mes', mes).eq('anio', anio).maybeSingle();
-
-          if (existing) {
-            await supabase.from('beca_uso_mensual').update({
-              monto_usado: Number(existing.monto_usado || 0) + carillasConBeca
-            }).eq('id', existing.id);
-          } else {
-            await supabase.from('beca_uso_mensual').insert({
-              user_id: user.id, mes, anio, monto_usado: carillasConBeca
-            });
-          }
-          setBecaUso(prev => prev + carillasConBeca);
-        }
+        // Beca usage is updated by the webhook after payment confirmation
       }
 
       // If total > 0, redirect to Mercado Pago
