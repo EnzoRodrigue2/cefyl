@@ -471,6 +471,7 @@ export default function Admin() {
                         <th className="text-left py-2 px-2 font-medium text-muted-foreground">Opciones</th>
                         <th className="text-right py-2 px-2 font-medium text-muted-foreground">Monto</th>
                         <th className="text-left py-2 px-2 font-medium text-muted-foreground">Estado</th>
+                        <th className="text-left py-2 px-2 font-medium text-muted-foreground">Acciones</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -495,7 +496,38 @@ export default function Admin() {
                               </div>
                             </td>
                             <td className="py-2 px-2 text-right font-medium">${Number(o.monto_final).toLocaleString('es-AR')}</td>
-                            <td className="py-2 px-2">{ESTADO_LABELS[o.estado] || o.estado}</td>
+                            <td className="py-2 px-2">
+                              <Select value={o.estado} onValueChange={(v) => updateOrdenEstado(o.id, v)}>
+                                <SelectTrigger className="w-36 h-8 text-xs"><SelectValue /></SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="pendiente_pago">Pendiente pago</SelectItem>
+                                  <SelectItem value="finalizada">Finalizada</SelectItem>
+                                </SelectContent>
+                              </Select>
+                            </td>
+                            <td className="py-2 px-2">
+                              <AlertDialog>
+                                <AlertDialogTrigger asChild>
+                                  <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:text-destructive">
+                                    <Trash2 className="h-3.5 w-3.5" />
+                                  </Button>
+                                </AlertDialogTrigger>
+                                <AlertDialogContent>
+                                  <AlertDialogHeader>
+                                    <AlertDialogTitle>¿Eliminar esta orden?</AlertDialogTitle>
+                                    <AlertDialogDescription>
+                                      Se eliminará la orden "{o.archivo_nombre}" y todos sus datos asociados.
+                                    </AlertDialogDescription>
+                                  </AlertDialogHeader>
+                                  <AlertDialogFooter>
+                                    <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                                    <AlertDialogAction onClick={() => deleteOrden(o.id, o.archivo_url)} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+                                      Eliminar
+                                    </AlertDialogAction>
+                                  </AlertDialogFooter>
+                                </AlertDialogContent>
+                              </AlertDialog>
+                            </td>
                           </tr>
                         );
                       })}
