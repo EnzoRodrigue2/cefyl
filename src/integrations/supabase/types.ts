@@ -304,6 +304,7 @@ export type Database = {
           created_at: string | null
           dni: string
           email: string
+          fecha_nacimiento: string | null
           id: string
           nombre_completo: string
           updated_at: string | null
@@ -315,6 +316,7 @@ export type Database = {
           created_at?: string | null
           dni: string
           email: string
+          fecha_nacimiento?: string | null
           id?: string
           nombre_completo: string
           updated_at?: string | null
@@ -326,6 +328,7 @@ export type Database = {
           created_at?: string | null
           dni?: string
           email?: string
+          fecha_nacimiento?: string | null
           id?: string
           nombre_completo?: string
           updated_at?: string | null
