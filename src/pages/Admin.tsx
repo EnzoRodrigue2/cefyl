@@ -75,6 +75,28 @@ export default function Admin() {
     else { toast.success('Estado actualizado'); loadAll(); }
   }
 
+  async function deleteOrden(id: string, archivoUrl: string) {
+    try {
+      // Delete related records first
+      await Promise.all([
+        supabase.from('turnos').delete().eq('orden_id', id),
+        supabase.from('pagos').delete().eq('orden_id', id),
+        supabase.from('movimientos_financieros').delete().eq('orden_id', id),
+      ]);
+      // Delete storage file
+      if (archivoUrl) {
+        await supabase.storage.from('print-files').remove([archivoUrl]);
+      }
+      // Delete the order
+      const { error } = await supabase.from('ordenes').delete().eq('id', id);
+      if (error) { toast.error(error.message); return; }
+      toast.success('Orden eliminada');
+      loadAll();
+    } catch (err: any) {
+      toast.error('Error eliminando orden: ' + err.message);
+    }
+  }
+
   async function updateConfig(clave: string, valor: string) {
     const { error } = await supabase.from('configuraciones').update({ valor }).eq('clave', clave);
     if (error) toast.error(error.message);
