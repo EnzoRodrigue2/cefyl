@@ -406,9 +406,31 @@ export default function Admin() {
                         <Select value={o.estado} onValueChange={(v) => updateOrdenEstado(o.id, v)}>
                           <SelectTrigger className="w-44"><SelectValue /></SelectTrigger>
                           <SelectContent>
-                            {Object.entries(ESTADO_LABELS).map(([k, v]) => <SelectItem key={k} value={k}>{v}</SelectItem>)}
+                            <SelectItem value="pendiente_pago">Pendiente pago</SelectItem>
+                            <SelectItem value="finalizada">Finalizada</SelectItem>
                           </SelectContent>
                         </Select>
+                        <AlertDialog>
+                          <AlertDialogTrigger asChild>
+                            <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive">
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </AlertDialogTrigger>
+                          <AlertDialogContent>
+                            <AlertDialogHeader>
+                              <AlertDialogTitle>¿Eliminar esta orden?</AlertDialogTitle>
+                              <AlertDialogDescription>
+                                Se eliminará la orden "{o.archivo_nombre}" y todos sus datos asociados. Esta acción no se puede deshacer.
+                              </AlertDialogDescription>
+                            </AlertDialogHeader>
+                            <AlertDialogFooter>
+                              <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                              <AlertDialogAction onClick={() => deleteOrden(o.id, o.archivo_url)} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+                                Eliminar
+                              </AlertDialogAction>
+                            </AlertDialogFooter>
+                          </AlertDialogContent>
+                        </AlertDialog>
                       </div>
                     </div>
                   ))}
