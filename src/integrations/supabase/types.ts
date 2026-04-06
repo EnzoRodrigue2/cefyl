@@ -203,6 +203,7 @@ export type Database = {
           descuento_beca: number | null
           doble_faz: boolean | null
           estado: Database["public"]["Enums"]["orden_estado"]
+          estado_produccion: Database["public"]["Enums"]["estado_produccion"]
           excedente: number | null
           id: string
           monto_final: number
@@ -223,6 +224,7 @@ export type Database = {
           descuento_beca?: number | null
           doble_faz?: boolean | null
           estado?: Database["public"]["Enums"]["orden_estado"]
+          estado_produccion?: Database["public"]["Enums"]["estado_produccion"]
           excedente?: number | null
           id?: string
           monto_final?: number
@@ -243,6 +245,7 @@ export type Database = {
           descuento_beca?: number | null
           doble_faz?: boolean | null
           estado?: Database["public"]["Enums"]["orden_estado"]
+          estado_produccion?: Database["public"]["Enums"]["estado_produccion"]
           excedente?: number | null
           id?: string
           monto_final?: number
@@ -426,6 +429,7 @@ export type Database = {
       app_role: "admin" | "student"
       beca_estado: "pendiente" | "aprobada" | "rechazada" | "revocada"
       beca_tipo: "sin_beca" | "50" | "100"
+      estado_produccion: "para_hacer" | "hecho" | "retirado"
       orden_estado:
         | "borrador"
         | "pendiente_pago"
@@ -566,6 +570,7 @@ export const Constants = {
       app_role: ["admin", "student"],
       beca_estado: ["pendiente", "aprobada", "rechazada", "revocada"],
       beca_tipo: ["sin_beca", "50", "100"],
+      estado_produccion: ["para_hacer", "hecho", "retirado"],
       orden_estado: [
         "borrador",
         "pendiente_pago",
