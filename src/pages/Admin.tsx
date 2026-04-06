@@ -11,7 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter, DialogClose } from '@/components/ui/dialog';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Users, FileText, DollarSign, Settings, GraduationCap, Download, History, Upload, Trash2, Loader2, Minus } from 'lucide-react';
+import { ArrowLeft, Users, FileText, DollarSign, Settings, GraduationCap, Download, History, Upload, Trash2, Loader2, Minus, Search } from 'lucide-react';
 import { toast } from 'sonner';
 import * as XLSX from 'xlsx';
 
@@ -20,6 +20,21 @@ const ESTADO_LABELS: Record<string, string> = {
   en_proceso: 'En proceso', finalizada: 'Finalizada', lista_retirar: 'Lista retirar',
   retirada: 'Retirada', cancelada: 'Cancelada',
 };
+
+const PRODUCCION_LABELS: Record<string, string> = {
+  para_hacer: 'Para hacer',
+  hecho: 'Hecho',
+  retirado: 'Retirado',
+};
+
+const PRODUCCION_BADGE_COLORS: Record<string, string> = {
+  para_hacer: 'bg-yellow-500/20 text-yellow-700',
+  hecho: 'bg-green-500/20 text-green-700',
+  retirado: 'bg-blue-500/20 text-blue-700',
+};
+
+// Only show paid orders in admin (exclude borrador, pendiente_pago, cancelada)
+const ESTADOS_VISIBLES = ['pagado', 'en_proceso', 'finalizada', 'lista_retirar', 'retirada'];
 
 export default function Admin() {
   const { isAdmin, session } = useAuth();
@@ -40,6 +55,13 @@ export default function Admin() {
   const [deductUserId, setDeductUserId] = useState('');
   const [deductCarillas, setDeductCarillas] = useState('');
   const [deducting, setDeducting] = useState(false);
+
+  // DNI search for manual deduction
+  const [dniSearch, setDniSearch] = useState('');
+  const [dniSearchResult, setDniSearchResult] = useState<any | null>(null);
+  const [dniSearching, setDniSearching] = useState(false);
+  const [dniDeductCarillas, setDniDeductCarillas] = useState('');
+  const [dniDeducting, setDniDeducting] = useState(false);
 
   useEffect(() => {
     if (!isAdmin) { navigate('/dashboard'); return; }
@@ -63,31 +85,30 @@ export default function Admin() {
     setBecasActivas(becasActRes.data || []);
     setBecaUsos(usoRes.data || []);
 
-    const ordenesHoy = ords.filter((o: any) => o.created_at?.startsWith(today)).length;
-    const ingresosHoy = ords.filter((o: any) => o.created_at?.startsWith(today) && o.estado !== 'cancelada')
+    // Stats only count paid orders
+    const paidOrds = ords.filter((o: any) => ESTADOS_VISIBLES.includes(o.estado));
+    const ordenesHoy = paidOrds.filter((o: any) => o.created_at?.startsWith(today)).length;
+    const ingresosHoy = paidOrds.filter((o: any) => o.created_at?.startsWith(today))
       .reduce((sum: number, o: any) => sum + Number(o.monto_final || 0), 0);
     setStats({ ordenesHoy, ingresosHoy, becasActivas: becasActRes.data?.length || 0, totalUsuarios: usersRes.data?.length || 0 });
   }
 
-  async function updateOrdenEstado(id: string, estado: string) {
-    const { error } = await supabase.from('ordenes').update({ estado: estado as any }).eq('id', id);
+  async function updateEstadoProduccion(id: string, estado: string) {
+    const { error } = await supabase.from('ordenes').update({ estado_produccion: estado as any }).eq('id', id);
     if (error) toast.error(error.message);
-    else { toast.success('Estado actualizado'); loadAll(); }
+    else { toast.success('Estado de producción actualizado'); loadAll(); }
   }
 
   async function deleteOrden(id: string, archivoUrl: string) {
     try {
-      // Delete related records first
       await Promise.all([
         supabase.from('turnos').delete().eq('orden_id', id),
         supabase.from('pagos').delete().eq('orden_id', id),
         supabase.from('movimientos_financieros').delete().eq('orden_id', id),
       ]);
-      // Delete storage file
       if (archivoUrl) {
         await supabase.storage.from('print-files').remove([archivoUrl]);
       }
-      // Delete the order
       const { error } = await supabase.from('ordenes').delete().eq('id', id);
       if (error) { toast.error(error.message); return; }
       toast.success('Orden eliminada');
@@ -131,7 +152,7 @@ export default function Admin() {
     return Number(uso?.monto_usado || 0);
   }
 
-  // Manual carilla deduction
+  // Manual carilla deduction by selector
   async function handleDeductCarillas() {
     if (!deductUserId || !deductCarillas || Number(deductCarillas) <= 0) {
       toast.error('Seleccioná un usuario e ingresá la cantidad de carillas');
@@ -165,6 +186,74 @@ export default function Admin() {
       toast.error(err.message);
     }
     setDeducting(false);
+  }
+
+  // DNI search for manual deduction
+  async function handleDniSearch() {
+    const dni = dniSearch.trim();
+    if (!dni || !/^\d+$/.test(dni)) {
+      toast.error('Ingresá un DNI numérico válido');
+      return;
+    }
+    setDniSearching(true);
+    setDniSearchResult(null);
+
+    const { data: profile } = await supabase.from('profiles').select('*').eq('dni', dni).maybeSingle();
+    if (!profile) {
+      toast.error('No se encontró un usuario con ese DNI');
+      setDniSearching(false);
+      return;
+    }
+
+    const beca = becasActivas.find((b: any) => b.user_id === profile.user_id);
+    const uso = getUserUso(profile.user_id);
+    const cfgMap: Record<string, number> = {};
+    config.forEach((c: any) => { cfgMap[c.clave] = Number(c.valor); });
+    const limite = beca ? (beca.tipo === '100' ? (cfgMap.limite_beca_100 || 500) : (cfgMap.limite_beca_50 || 200)) : 0;
+    const disponible = Math.max(0, limite - uso);
+
+    setDniSearchResult({ ...profile, beca, uso, limite, disponible });
+    setDniSearching(false);
+  }
+
+  async function handleDniDeduct() {
+    if (!dniSearchResult || !dniDeductCarillas || Number(dniDeductCarillas) <= 0) {
+      toast.error('Ingresá la cantidad de carillas a descontar');
+      return;
+    }
+    const cantidad = Number(dniDeductCarillas);
+    if (cantidad > dniSearchResult.disponible) {
+      toast.error(`No se puede descontar ${cantidad} carillas. Disponible: ${dniSearchResult.disponible}`);
+      return;
+    }
+    setDniDeducting(true);
+    try {
+      const now = new Date();
+      const mes = now.getMonth() + 1;
+      const anio = now.getFullYear();
+
+      const { data: existing } = await supabase.from('beca_uso_mensual')
+        .select('*').eq('user_id', dniSearchResult.user_id).eq('mes', mes).eq('anio', anio).maybeSingle();
+
+      if (existing) {
+        await supabase.from('beca_uso_mensual').update({
+          monto_usado: Number(existing.monto_usado || 0) + cantidad
+        }).eq('id', existing.id);
+      } else {
+        await supabase.from('beca_uso_mensual').insert({
+          user_id: dniSearchResult.user_id, mes, anio, monto_usado: cantidad
+        });
+      }
+
+      toast.success(`✅ ${cantidad} carillas descontadas a ${dniSearchResult.nombre_completo}`);
+      setDniDeductCarillas('');
+      setDniSearchResult(null);
+      setDniSearch('');
+      loadAll();
+    } catch (err: any) {
+      toast.error(err.message);
+    }
+    setDniDeducting(false);
   }
 
   // Excel upload for bulk user creation
@@ -251,7 +340,8 @@ export default function Admin() {
 
   // Excel export
   function exportBalanceExcel() {
-    const rows = ordenes.filter(o => o.estado !== 'cancelada').map(o => {
+    const paidOrds = ordenes.filter(o => ESTADOS_VISIBLES.includes(o.estado));
+    const rows = paidOrds.map(o => {
       const u = getUserInfo(o.user_id);
       return {
         Fecha: new Date(o.created_at).toLocaleString('es-AR'),
@@ -269,6 +359,7 @@ export default function Admin() {
         'Descuento Beca': Number(o.descuento_beca || 0),
         'Monto Final': Number(o.monto_final),
         Estado: ESTADO_LABELS[o.estado] || o.estado,
+        'Estado Producción': PRODUCCION_LABELS[o.estado_produccion] || o.estado_produccion || 'Para hacer',
       };
     });
     const ws = XLSX.utils.json_to_sheet(rows);
@@ -288,7 +379,10 @@ export default function Admin() {
     toast.success('Excel descargado');
   }
 
-  const filteredOrdenes = ordenes.filter(o => {
+  // Only show paid orders
+  const visibleOrdenes = ordenes.filter(o => ESTADOS_VISIBLES.includes(o.estado));
+
+  const filteredOrdenes = visibleOrdenes.filter(o => {
     if (fechaDesde && o.created_at < fechaDesde) return false;
     if (fechaHasta && o.created_at > fechaHasta + 'T23:59:59') return false;
     return true;
@@ -320,7 +414,7 @@ export default function Admin() {
       <main className="max-w-6xl mx-auto p-6 space-y-6 animate-fade-in">
         {/* Stats */}
         <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
-          <Card><CardHeader className="pb-2"><p className="text-sm text-muted-foreground flex items-center gap-1"><FileText className="h-3.5 w-3.5" />Órdenes hoy</p><p className="text-2xl font-bold">{stats.ordenesHoy}</p></CardHeader></Card>
+          <Card><CardHeader className="pb-2"><p className="text-sm text-muted-foreground flex items-center gap-1"><FileText className="h-3.5 w-3.5" />Órdenes hoy (pagadas)</p><p className="text-2xl font-bold">{stats.ordenesHoy}</p></CardHeader></Card>
           <Card><CardHeader className="pb-2"><p className="text-sm text-muted-foreground flex items-center gap-1"><DollarSign className="h-3.5 w-3.5" />Ingresos hoy</p><p className="text-2xl font-bold">${stats.ingresosHoy.toLocaleString('es-AR')}</p></CardHeader></Card>
           <Card><CardHeader className="pb-2"><p className="text-sm text-muted-foreground flex items-center gap-1"><GraduationCap className="h-3.5 w-3.5" />Becas activas</p><p className="text-2xl font-bold">{stats.becasActivas}</p></CardHeader></Card>
           <Card><CardHeader className="pb-2"><p className="text-sm text-muted-foreground flex items-center gap-1"><Users className="h-3.5 w-3.5" />Usuarios</p><p className="text-2xl font-bold">{stats.totalUsuarios}</p></CardHeader></Card>
@@ -378,18 +472,18 @@ export default function Admin() {
             <TabsTrigger value="config" className="gap-1"><Settings className="h-3.5 w-3.5" />Precios y Config</TabsTrigger>
           </TabsList>
 
-          {/* Ordenes tab */}
+          {/* Ordenes tab - only paid orders */}
           <TabsContent value="ordenes" className="mt-4">
             <Card>
               <CardHeader className="flex flex-row items-center justify-between">
-                <CardTitle className="text-lg">Órdenes recientes</CardTitle>
+                <CardTitle className="text-lg">Órdenes pagadas</CardTitle>
                 <Button variant="outline" size="sm" className="gap-2" onClick={exportBalanceExcel}>
                   <Download className="h-4 w-4" /> Descargar Excel
                 </Button>
               </CardHeader>
               <CardContent>
                 <div className="space-y-3">
-                  {ordenes.slice(0, 50).map(o => (
+                  {visibleOrdenes.slice(0, 50).map(o => (
                     <div key={o.id} className="flex items-center justify-between p-3 rounded-lg border">
                       <div className="flex-1 min-w-0">
                         <p className="font-medium text-sm">{o.archivo_nombre}</p>
@@ -403,11 +497,12 @@ export default function Admin() {
                         <Button variant="outline" size="sm" className="gap-1" onClick={() => handleDownloadFile(o.archivo_url, o.archivo_nombre)}>
                           <Download className="h-3.5 w-3.5" /> PDF
                         </Button>
-                        <Select value={o.estado} onValueChange={(v) => updateOrdenEstado(o.id, v)}>
-                          <SelectTrigger className="w-44"><SelectValue /></SelectTrigger>
+                        <Select value={o.estado_produccion || 'para_hacer'} onValueChange={(v) => updateEstadoProduccion(o.id, v)}>
+                          <SelectTrigger className="w-36"><SelectValue /></SelectTrigger>
                           <SelectContent>
-                            <SelectItem value="pendiente_pago">Pendiente pago</SelectItem>
-                            <SelectItem value="finalizada">Finalizada</SelectItem>
+                            <SelectItem value="para_hacer">Para hacer</SelectItem>
+                            <SelectItem value="hecho">Hecho</SelectItem>
+                            <SelectItem value="retirado">Retirado</SelectItem>
                           </SelectContent>
                         </Select>
                         <AlertDialog>
@@ -434,7 +529,7 @@ export default function Admin() {
                       </div>
                     </div>
                   ))}
-                  {ordenes.length === 0 && <p className="text-center text-muted-foreground py-8">No hay órdenes</p>}
+                  {visibleOrdenes.length === 0 && <p className="text-center text-muted-foreground py-8">No hay órdenes pagadas</p>}
                 </div>
               </CardContent>
             </Card>
@@ -470,7 +565,7 @@ export default function Admin() {
                         <th className="text-right py-2 px-2 font-medium text-muted-foreground">Hojas</th>
                         <th className="text-left py-2 px-2 font-medium text-muted-foreground">Opciones</th>
                         <th className="text-right py-2 px-2 font-medium text-muted-foreground">Monto</th>
-                        <th className="text-left py-2 px-2 font-medium text-muted-foreground">Estado</th>
+                        <th className="text-left py-2 px-2 font-medium text-muted-foreground">Producción</th>
                         <th className="text-left py-2 px-2 font-medium text-muted-foreground">Acciones</th>
                       </tr>
                     </thead>
@@ -497,11 +592,12 @@ export default function Admin() {
                             </td>
                             <td className="py-2 px-2 text-right font-medium">${Number(o.monto_final).toLocaleString('es-AR')}</td>
                             <td className="py-2 px-2">
-                              <Select value={o.estado} onValueChange={(v) => updateOrdenEstado(o.id, v)}>
-                                <SelectTrigger className="w-36 h-8 text-xs"><SelectValue /></SelectTrigger>
+                              <Select value={o.estado_produccion || 'para_hacer'} onValueChange={(v) => updateEstadoProduccion(o.id, v)}>
+                                <SelectTrigger className="w-32 h-8 text-xs"><SelectValue /></SelectTrigger>
                                 <SelectContent>
-                                  <SelectItem value="pendiente_pago">Pendiente pago</SelectItem>
-                                  <SelectItem value="finalizada">Finalizada</SelectItem>
+                                  <SelectItem value="para_hacer">Para hacer</SelectItem>
+                                  <SelectItem value="hecho">Hecho</SelectItem>
+                                  <SelectItem value="retirado">Retirado</SelectItem>
                                 </SelectContent>
                               </Select>
                             </td>
@@ -541,15 +637,78 @@ export default function Admin() {
 
           {/* Becas tab - with manual deduction */}
           <TabsContent value="becas" className="mt-4 space-y-4">
-            {/* Manual deduction card */}
+            {/* DNI search deduction card */}
             <Card className="border-primary/30">
               <CardHeader>
-                <CardTitle className="text-lg flex items-center gap-2"><Minus className="h-5 w-5" /> Descontar carillas (compra presencial)</CardTitle>
+                <CardTitle className="text-lg flex items-center gap-2"><Search className="h-5 w-5" /> Buscar por DNI y descontar carillas</CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
                 <p className="text-sm text-muted-foreground">
-                  Si un alumno compró en persona y usó su beca, descontale las carillas manualmente acá.
+                  Buscá un usuario por DNI para ver su información y descontarle carillas manualmente.
                 </p>
+                <div className="flex gap-3 items-end">
+                  <div className="space-y-1 flex-1 max-w-xs">
+                    <Label className="text-xs">DNI</Label>
+                    <Input
+                      type="text"
+                      inputMode="numeric"
+                      placeholder="Ingresá el DNI..."
+                      value={dniSearch}
+                      onChange={e => setDniSearch(e.target.value.replace(/\D/g, ''))}
+                      onKeyDown={e => e.key === 'Enter' && handleDniSearch()}
+                    />
+                  </div>
+                  <Button onClick={handleDniSearch} disabled={dniSearching} className="gap-2">
+                    {dniSearching ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
+                    Buscar
+                  </Button>
+                </div>
+
+                {dniSearchResult && (
+                  <div className="p-4 rounded-lg border bg-muted/30 space-y-3">
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm">
+                      <div>
+                        <p className="text-xs text-muted-foreground">Nombre</p>
+                        <p className="font-medium">{dniSearchResult.nombre_completo}</p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-muted-foreground">Carrera</p>
+                        <p className="font-medium">{dniSearchResult.carrera}</p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-muted-foreground">Beca</p>
+                        <p className="font-medium">{dniSearchResult.beca ? `${dniSearchResult.beca.tipo}%` : 'Sin beca'}</p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-muted-foreground">Carillas disponibles</p>
+                        <p className={`font-bold ${dniSearchResult.disponible < 50 ? 'text-destructive' : 'text-primary'}`}>
+                          {dniSearchResult.beca ? `${dniSearchResult.disponible} / ${dniSearchResult.limite}` : 'N/A'}
+                        </p>
+                      </div>
+                    </div>
+                    {dniSearchResult.beca && dniSearchResult.disponible > 0 && (
+                      <div className="flex gap-3 items-end">
+                        <div className="space-y-1 w-32">
+                          <Label className="text-xs">Carillas a descontar</Label>
+                          <Input type="number" min="1" max={dniSearchResult.disponible} value={dniDeductCarillas} onChange={e => setDniDeductCarillas(e.target.value)} placeholder="Cant." />
+                        </div>
+                        <Button onClick={handleDniDeduct} disabled={dniDeducting} className="gap-2">
+                          {dniDeducting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Minus className="h-4 w-4" />}
+                          Descontar
+                        </Button>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* Existing selector deduction card */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-lg flex items-center gap-2"><Minus className="h-5 w-5" /> Descontar carillas (por selector)</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
                 <div className="flex flex-wrap gap-3 items-end">
                   <div className="space-y-1 flex-1 min-w-48">
                     <Label className="text-xs">Alumno</Label>
