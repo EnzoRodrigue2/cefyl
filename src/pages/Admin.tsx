@@ -656,26 +656,26 @@ export default function Admin() {
             </Card>
           </TabsContent>
 
-          {/* Becas tab - with manual deduction */}
+          {/* Becas tab - unified search & deduction */}
           <TabsContent value="becas" className="mt-4 space-y-4">
-            {/* DNI search deduction card */}
             <Card className="border-primary/30">
               <CardHeader>
-                <CardTitle className="text-lg flex items-center gap-2"><Search className="h-5 w-5" /> Buscar por DNI y descontar carillas</CardTitle>
+                <CardTitle className="text-lg flex items-center gap-2"><Search className="h-5 w-5" /> Buscar y descontar carillas</CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
                 <p className="text-sm text-muted-foreground">
-                  Buscá un usuario por DNI para ver su información y descontarle carillas manualmente.
+                  Buscá un usuario por DNI o seleccionalo de la lista para descontarle carillas manualmente.
                 </p>
+
                 <div className="flex gap-3 items-end">
                   <div className="space-y-1 flex-1 max-w-xs">
-                    <Label className="text-xs">DNI</Label>
+                    <Label className="text-xs">Buscar por DNI</Label>
                     <Input
                       type="text"
                       inputMode="numeric"
                       placeholder="Ingresá el DNI..."
                       value={dniSearch}
-                      onChange={e => setDniSearch(e.target.value.replace(/\D/g, ''))}
+                      onChange={e => { setDniSearch(e.target.value.replace(/\D/g, '')); setDeductUserId(''); }}
                       onKeyDown={e => e.key === 'Enter' && handleDniSearch()}
                     />
                   </div>
@@ -685,6 +685,38 @@ export default function Admin() {
                   </Button>
                 </div>
 
+                <div className="flex items-center gap-3">
+                  <span className="text-xs text-muted-foreground">o seleccioná de la lista</span>
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs">Alumno</Label>
+                  <Select value={deductUserId} onValueChange={(val) => {
+                    setDeductUserId(val);
+                    setDniSearchResult(null);
+                    setDniSearch('');
+                    const bu = becaUsers.find((b: any) => b.user_id === val);
+                    if (bu) {
+                      setDniSearchResult({
+                        user_id: bu.user_id,
+                        nombre_completo: bu.nombre,
+                        carrera: '',
+                        beca: { tipo: bu.tipo },
+                        disponible: bu.disponible,
+                        limite: bu.limite,
+                      });
+                    }
+                  }}>
+                    <SelectTrigger><SelectValue placeholder="Seleccionar alumno..." /></SelectTrigger>
+                    <SelectContent>
+                      {becaUsers.map((bu: any) => (
+                        <SelectItem key={bu.user_id} value={bu.user_id}>
+                          {bu.nombre} (DNI: {bu.dni}) — Beca {bu.tipo}% — Disponible: {bu.disponible}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
                 {dniSearchResult && (
                   <div className="p-4 rounded-lg border bg-muted/30 space-y-3">
                     <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm">
@@ -692,10 +724,12 @@ export default function Admin() {
                         <p className="text-xs text-muted-foreground">Nombre</p>
                         <p className="font-medium">{dniSearchResult.nombre_completo}</p>
                       </div>
-                      <div>
-                        <p className="text-xs text-muted-foreground">Carrera</p>
-                        <p className="font-medium">{dniSearchResult.carrera}</p>
-                      </div>
+                      {dniSearchResult.carrera && (
+                        <div>
+                          <p className="text-xs text-muted-foreground">Carrera</p>
+                          <p className="font-medium">{dniSearchResult.carrera}</p>
+                        </div>
+                      )}
                       <div>
                         <p className="text-xs text-muted-foreground">Beca</p>
                         <p className="font-medium">{dniSearchResult.beca ? `${dniSearchResult.beca.tipo}%` : 'Sin beca'}</p>
@@ -721,38 +755,6 @@ export default function Admin() {
                     )}
                   </div>
                 )}
-              </CardContent>
-            </Card>
-
-            {/* Existing selector deduction card */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-lg flex items-center gap-2"><Minus className="h-5 w-5" /> Descontar carillas (por selector)</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="flex flex-wrap gap-3 items-end">
-                  <div className="space-y-1 flex-1 min-w-48">
-                    <Label className="text-xs">Alumno</Label>
-                    <Select value={deductUserId} onValueChange={setDeductUserId}>
-                      <SelectTrigger><SelectValue placeholder="Seleccionar alumno..." /></SelectTrigger>
-                      <SelectContent>
-                        {becaUsers.map(bu => (
-                          <SelectItem key={bu.user_id} value={bu.user_id}>
-                            {bu.nombre} (DNI: {bu.dni}) — Beca {bu.tipo}% — Disponible: {bu.disponible} carillas
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-1 w-32">
-                    <Label className="text-xs">Carillas</Label>
-                    <Input type="number" min="1" value={deductCarillas} onChange={e => setDeductCarillas(e.target.value)} placeholder="Cant." />
-                  </div>
-                  <Button onClick={handleDeductCarillas} disabled={deducting} className="gap-2">
-                    {deducting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Minus className="h-4 w-4" />}
-                    Descontar
-                  </Button>
-                </div>
               </CardContent>
             </Card>
 
