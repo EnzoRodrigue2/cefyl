@@ -150,8 +150,9 @@ Deno.serve(async (req) => {
         continue;
       }
 
-      // Create beca if percentage > 0
-      const becaPct = parseInt(porcentaje_beca?.toString() || "0");
+      // Create beca if percentage is 50 or 100
+      let becaPct = parseFloat(porcentaje_beca?.toString() || "0");
+      if (becaPct > 0 && becaPct <= 1) becaPct = Math.round(becaPct * 100); // 0.5 → 50, 1 → 100
       if (becaPct === 50 || becaPct === 100) {
         await adminClient.from("becas").insert({
           user_id: newUser.user.id,
