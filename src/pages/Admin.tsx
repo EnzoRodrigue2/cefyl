@@ -280,13 +280,18 @@ export default function Admin() {
           return '';
         };
 
+        // Parse beca percentage: Excel may have 0.5, 1, "50%", "100%", 50, 100
+        const rawBeca = (findCol(['porcentaje', 'beca', '%beca']) || '0').toString().trim().replace(/%/g, '');
+        let becaPct = parseFloat(rawBeca) || 0;
+        if (becaPct > 0 && becaPct <= 1) becaPct = Math.round(becaPct * 100); // 0.5 → 50, 1 → 100
+
         return {
           dni: (findCol(['dni', 'documento']) || '').toString().trim(),
           email: (findCol(['correo', 'email', 'mail']) || '').toString().trim().toLowerCase(),
           apellido: (findCol(['apellido']) || '').toString().trim(),
           nombre: (findCol(['nombre']) || '').toString().trim(),
           carrera: (findCol(['carrera']) || '').toString().trim(),
-          porcentaje_beca: (findCol(['porcentaje', 'beca', '%beca']) || '0').toString().trim(),
+          porcentaje_beca: becaPct.toString(),
         };
       }).filter(u => u.dni && u.email);
 
@@ -296,20 +301,36 @@ export default function Admin() {
         return;
       }
 
-      const { data: result, error } = await supabase.functions.invoke('bulk-create-users', {
-        body: { users },
-      });
+      // Send in batches of 50 to avoid edge function timeout
+      const BATCH_SIZE = 50;
+      let totalCreated = 0, totalSkipped = 0;
+      const allErrors: string[] = [];
 
-      if (error) {
-        toast.error('Error al procesar: ' + error.message);
-      } else if (result) {
-        toast.success(`✅ ${result.created} usuarios creados, ${result.skipped} omitidos (ya existían)`);
-        if (result.errors?.length > 0) {
-          console.warn('Errores:', result.errors);
-          toast.warning(`${result.errors.length} errores. Revisá la consola.`);
+      for (let i = 0; i < users.length; i += BATCH_SIZE) {
+        const batch = users.slice(i, i + BATCH_SIZE);
+        toast.info(`Procesando lote ${Math.floor(i / BATCH_SIZE) + 1} de ${Math.ceil(users.length / BATCH_SIZE)}...`);
+        
+        const { data: result, error } = await supabase.functions.invoke('bulk-create-users', {
+          body: { users: batch },
+        });
+
+        if (error) {
+          allErrors.push(`Lote ${Math.floor(i / BATCH_SIZE) + 1}: ${error.message}`);
+          continue;
         }
-        loadAll();
+        if (result) {
+          totalCreated += result.created || 0;
+          totalSkipped += result.skipped || 0;
+          if (result.errors?.length) allErrors.push(...result.errors);
+        }
       }
+
+      toast.success(`✅ ${totalCreated} usuarios creados, ${totalSkipped} omitidos (ya existían)`);
+      if (allErrors.length > 0) {
+        console.warn('Errores:', allErrors);
+        toast.warning(`${allErrors.length} errores. Revisá la consola.`);
+      }
+      loadAll();
     } catch (err: any) {
       toast.error('Error leyendo el archivo: ' + err.message);
     }
