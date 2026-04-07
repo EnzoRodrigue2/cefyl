@@ -280,13 +280,18 @@ export default function Admin() {
           return '';
         };
 
+        // Parse beca percentage: Excel may have 0.5, 1, "50%", "100%", 50, 100
+        const rawBeca = (findCol(['porcentaje', 'beca', '%beca']) || '0').toString().trim().replace(/%/g, '');
+        let becaPct = parseFloat(rawBeca) || 0;
+        if (becaPct > 0 && becaPct <= 1) becaPct = Math.round(becaPct * 100); // 0.5 → 50, 1 → 100
+
         return {
           dni: (findCol(['dni', 'documento']) || '').toString().trim(),
           email: (findCol(['correo', 'email', 'mail']) || '').toString().trim().toLowerCase(),
           apellido: (findCol(['apellido']) || '').toString().trim(),
           nombre: (findCol(['nombre']) || '').toString().trim(),
           carrera: (findCol(['carrera']) || '').toString().trim(),
-          porcentaje_beca: (findCol(['porcentaje', 'beca', '%beca']) || '0').toString().trim(),
+          porcentaje_beca: becaPct.toString(),
         };
       }).filter(u => u.dni && u.email);
 
