@@ -36,6 +36,25 @@ const PRODUCCION_BADGE_COLORS: Record<string, string> = {
 // Only show paid orders in admin (exclude borrador, pendiente_pago, cancelada)
 const ESTADOS_VISIBLES = ['pagado', 'en_proceso', 'finalizada', 'lista_retirar', 'retirada'];
 
+const normalizeHeaderKey = (value: string) => value
+  .toLowerCase()
+  .normalize('NFD')
+  .replace(/[\u0300-\u036f]/g, '')
+  .replace(/[^a-z0-9]/g, '');
+
+const cleanDniValue = (value: unknown) => String(value ?? '').trim().replace(/[,.\s]/g, '');
+
+const cleanEmailValue = (value: unknown) => String(value ?? '').trim().toLowerCase();
+
+const parseBecaPercentage = (value: unknown) => {
+  const raw = String(value ?? '').trim().replace(/%+/g, '').replace(',', '.');
+  let becaPct = parseFloat(raw) || 0;
+  if (becaPct > 0 && becaPct <= 1) becaPct = Math.round(becaPct * 100);
+  if (Math.abs(becaPct - 100) < 1) return '100';
+  if (Math.abs(becaPct - 50) < 1) return '50';
+  return '0';
+};
+
 export default function Admin() {
   const { isAdmin, session } = useAuth();
   const navigate = useNavigate();
@@ -270,30 +289,38 @@ export default function Admin() {
 
       if (rows.length === 0) { toast.error('El Excel está vacío'); setUploading(false); return; }
 
+      const seenDnis = new Set<string>();
+      const seenEmails = new Set<string>();
+      let duplicatedInExcel = 0;
+
       const users = rows.map(row => {
         const keys = Object.keys(row);
         const findCol = (patterns: string[]) => {
           for (const p of patterns) {
-            const found = keys.find(k => k.toLowerCase().replace(/[^a-záéíóú]/g, '').includes(p));
+            const found = keys.find(k => normalizeHeaderKey(k).includes(p));
             if (found) return row[found];
           }
           return '';
         };
 
-        // Parse beca percentage: Excel may have 0.5, 1, "50%", "100%", 50, 100
-        const rawBeca = (findCol(['porcentaje', 'beca', '%beca']) || '0').toString().trim().replace(/%/g, '');
-        let becaPct = parseFloat(rawBeca) || 0;
-        if (becaPct > 0 && becaPct <= 1) becaPct = Math.round(becaPct * 100); // 0.5 → 50, 1 → 100
-
         return {
-          dni: (findCol(['dni', 'documento']) || '').toString().trim().replace(/[,.\s]/g, ''),
-          email: (findCol(['correo', 'email', 'mail']) || '').toString().trim().toLowerCase(),
+          dni: cleanDniValue(findCol(['dni', 'documento'])),
+          email: cleanEmailValue(findCol(['correo', 'email', 'mail'])),
           apellido: (findCol(['apellido']) || '').toString().trim(),
           nombre: (findCol(['nombre']) || '').toString().trim(),
           carrera: (findCol(['carrera']) || '').toString().trim(),
-          porcentaje_beca: becaPct.toString(),
+          porcentaje_beca: parseBecaPercentage(findCol(['porcentaje', 'beca', 'porcentajedebeca'])),
         };
-      }).filter(u => u.dni && u.email);
+      }).filter(u => {
+        if (!u.dni || !u.email) return false;
+        if (seenDnis.has(u.dni) || seenEmails.has(u.email)) {
+          duplicatedInExcel += 1;
+          return false;
+        }
+        seenDnis.add(u.dni);
+        seenEmails.add(u.email);
+        return true;
+      });
 
       if (users.length === 0) {
         toast.error('No se encontraron filas válidas. Verificá las columnas: DNI, CORREO ELECTRONICO, APELLIDO, NOMBRE, CARRERA, PORCENTAJE DE BECA');
@@ -301,34 +328,54 @@ export default function Admin() {
         return;
       }
 
-      // Send in batches of 50 to avoid edge function timeout
-      const BATCH_SIZE = 25;
+      const BATCH_SIZE = 10;
+      const MAX_CONCURRENT_BATCHES = 4;
       let totalCreated = 0, totalSkipped = 0;
       const allErrors: string[] = [];
+      const batches = Array.from({ length: Math.ceil(users.length / BATCH_SIZE) }, (_, index) => ({
+        number: index + 1,
+        users: users.slice(index * BATCH_SIZE, (index + 1) * BATCH_SIZE),
+      }));
 
-      for (let i = 0; i < users.length; i += BATCH_SIZE) {
-        const batch = users.slice(i, i + BATCH_SIZE);
-        toast.info(`Procesando lote ${Math.floor(i / BATCH_SIZE) + 1} de ${Math.ceil(users.length / BATCH_SIZE)}...`);
-        
-        const { data: result, error } = await supabase.functions.invoke('bulk-create-users', {
-          body: { users: batch },
-        });
+      let nextBatchIndex = 0;
 
-        if (error) {
-          allErrors.push(`Lote ${Math.floor(i / BATCH_SIZE) + 1}: ${error.message}`);
-          continue;
+      const processBatch = async () => {
+        while (nextBatchIndex < batches.length) {
+          const currentIndex = nextBatchIndex++;
+          const batch = batches[currentIndex];
+
+          const { data: result, error } = await supabase.functions.invoke('bulk-create-users', {
+            body: { users: batch.users },
+          });
+
+          if (error) {
+            allErrors.push(`Lote ${batch.number}: ${error.message}`);
+            continue;
+          }
+
+          if (result) {
+            totalCreated += result.created || 0;
+            totalSkipped += result.skipped || 0;
+            if (result.errors?.length) {
+              allErrors.push(...result.errors.map((message: string) => `Lote ${batch.number}: ${message}`));
+            }
+          }
         }
-        if (result) {
-          totalCreated += result.created || 0;
-          totalSkipped += result.skipped || 0;
-          if (result.errors?.length) allErrors.push(...result.errors);
-        }
+      };
+
+      await Promise.all(
+        Array.from({ length: Math.min(MAX_CONCURRENT_BATCHES, batches.length) }, () => processBatch())
+      );
+
+      if (duplicatedInExcel > 0) {
+        totalSkipped += duplicatedInExcel;
+        allErrors.push(`${duplicatedInExcel} filas duplicadas en el Excel fueron omitidas antes de importar.`);
       }
 
-      toast.success(`✅ ${totalCreated} usuarios creados, ${totalSkipped} omitidos (ya existían)`);
+      toast.success(`✅ ${totalCreated} usuarios creados, ${totalSkipped} omitidos`);
       if (allErrors.length > 0) {
         console.warn('Errores:', allErrors);
-        toast.warning(`${allErrors.length} errores. Revisá la consola.`);
+        toast.warning(`${allErrors.length} incidencias. Revisá la consola.`);
       }
       loadAll();
     } catch (err: any) {
