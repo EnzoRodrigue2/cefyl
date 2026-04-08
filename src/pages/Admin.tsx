@@ -286,7 +286,7 @@ export default function Admin() {
         if (becaPct > 0 && becaPct <= 1) becaPct = Math.round(becaPct * 100); // 0.5 → 50, 1 → 100
 
         return {
-          dni: (findCol(['dni', 'documento']) || '').toString().trim(),
+          dni: (findCol(['dni', 'documento']) || '').toString().trim().replace(/[,.\s]/g, ''),
           email: (findCol(['correo', 'email', 'mail']) || '').toString().trim().toLowerCase(),
           apellido: (findCol(['apellido']) || '').toString().trim(),
           nombre: (findCol(['nombre']) || '').toString().trim(),
