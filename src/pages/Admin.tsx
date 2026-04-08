@@ -302,7 +302,7 @@ export default function Admin() {
       }
 
       // Send in batches of 50 to avoid edge function timeout
-      const BATCH_SIZE = 50;
+      const BATCH_SIZE = 25;
       let totalCreated = 0, totalSkipped = 0;
       const allErrors: string[] = [];
 

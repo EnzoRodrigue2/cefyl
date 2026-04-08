@@ -97,7 +97,8 @@ Deno.serve(async (req) => {
     const results = { created: 0, skipped: 0, errors: [] as string[] };
 
     for (const u of users) {
-      const { dni, email, apellido, nombre, carrera, porcentaje_beca } = u;
+      const { email, apellido, nombre, carrera, porcentaje_beca } = u;
+      const dni = (u.dni || '').toString().trim().replace(/[,.\s]/g, '');
 
       if (!dni || !email) {
         results.errors.push(`Fila sin DNI o email: ${JSON.stringify(u)}`);
