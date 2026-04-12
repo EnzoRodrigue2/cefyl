@@ -162,7 +162,8 @@ export default function NuevaOrden() {
       for (let i = 0; i < files.length; i++) {
         const { file, estimatedPages, usarBeca } = files[i];
         const { hojas, base, descuento, final: montoFinal, carillasConBeca } = totals[i];
-        const filePath = `${user.id}/${Date.now()}_${file.name}`;
+        const safeName = file.name.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-zA-Z0-9._-]/g, '_');
+        const filePath = `${user.id}/${Date.now()}_${safeName}`;
         const { error: uploadError } = await supabase.storage.from('print-files').upload(filePath, file);
         if (uploadError) throw new Error(`Error subiendo "${file.name}": ${uploadError.message}`);
 
