@@ -5,8 +5,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
-import { Printer, FileText, Clock, GraduationCap, Plus, LogOut, AlertTriangle } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { Printer, FileText, Clock, GraduationCap, Plus, LogOut, AlertTriangle, CheckCircle, X } from 'lucide-react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 
 const ESTADO_COLORS: Record<string, string> = {
   borrador: 'bg-muted text-muted-foreground',
@@ -28,11 +28,31 @@ const ESTADO_LABELS: Record<string, string> = {
 export default function Dashboard() {
   const { user, signOut, isAdmin } = useAuth();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [showConfirmation, setShowConfirmation] = useState(false);
   const [profile, setProfile] = useState<any>(null);
   const [ordenes, setOrdenes] = useState<any[]>([]);
   const [becaActiva, setBecaActiva] = useState<any>(null);
   const [becaUso, setBecaUso] = useState(0); // carillas used
   const [limiteBeca, setLimiteBeca] = useState(500);
+
+  useEffect(() => {
+    if (searchParams.get('pedido') === 'confirmado' || searchParams.get('status') === 'approved') {
+      setShowConfirmation(true);
+      searchParams.delete('pedido');
+      searchParams.delete('status');
+      searchParams.delete('collection_id');
+      searchParams.delete('collection_status');
+      searchParams.delete('payment_id');
+      searchParams.delete('payment_type');
+      searchParams.delete('merchant_order_id');
+      searchParams.delete('preference_id');
+      searchParams.delete('site_id');
+      searchParams.delete('processing_mode');
+      searchParams.delete('merchant_account_id');
+      setSearchParams(searchParams, { replace: true });
+    }
+  }, []);
 
   useEffect(() => { if (user) loadData(); }, [user]);
 
@@ -81,6 +101,21 @@ export default function Dashboard() {
       </header>
 
       <main className="max-w-5xl mx-auto p-6 space-y-6 animate-fade-in">
+        {/* Confirmation banner after payment */}
+        {showConfirmation && (
+          <div className="rounded-lg border border-primary/30 bg-primary/10 p-4 flex items-start gap-3 relative">
+            <CheckCircle className="h-6 w-6 text-primary mt-0.5 shrink-0" />
+            <div>
+              <p className="font-bold text-sm text-primary">✅ ¡Tu pedido fue registrado con éxito!</p>
+              <p className="text-sm text-muted-foreground mt-1">
+                Tu pedido va a estar disponible dentro de <span className="font-bold text-foreground">24 a 48 horas hábiles</span>, dependiendo de nuestra demanda. Te vamos a avisar cuando esté listo para retirar.
+              </p>
+            </div>
+            <button onClick={() => setShowConfirmation(false)} className="absolute top-3 right-3 text-muted-foreground hover:text-foreground">
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+        )}
         {/* Quick stats */}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <Card>
