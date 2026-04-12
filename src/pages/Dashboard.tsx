@@ -103,10 +103,10 @@ export default function Dashboard() {
       <main className="max-w-5xl mx-auto p-6 space-y-6 animate-fade-in">
         {/* Confirmation banner after payment */}
         {showConfirmation && (
-          <div className="rounded-lg border border-green-500/30 bg-green-500/10 p-4 flex items-start gap-3 relative">
-            <CheckCircle className="h-6 w-6 text-green-600 mt-0.5 shrink-0" />
+          <div className="rounded-lg border border-primary/30 bg-primary/10 p-4 flex items-start gap-3 relative">
+            <CheckCircle className="h-6 w-6 text-primary mt-0.5 shrink-0" />
             <div>
-              <p className="font-bold text-sm text-green-700">✅ ¡Tu pedido fue registrado con éxito!</p>
+              <p className="font-bold text-sm text-primary">✅ ¡Tu pedido fue registrado con éxito!</p>
               <p className="text-sm text-muted-foreground mt-1">
                 Tu pedido va a estar disponible dentro de <span className="font-bold text-foreground">24 a 48 horas hábiles</span>, dependiendo de nuestra demanda. Te vamos a avisar cuando esté listo para retirar.
               </p>
