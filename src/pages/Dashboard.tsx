@@ -5,8 +5,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
-import { Printer, FileText, Clock, GraduationCap, Plus, LogOut, AlertTriangle } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { Printer, FileText, Clock, GraduationCap, Plus, LogOut, AlertTriangle, CheckCircle, X } from 'lucide-react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 
 const ESTADO_COLORS: Record<string, string> = {
   borrador: 'bg-muted text-muted-foreground',
