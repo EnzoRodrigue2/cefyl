@@ -13,7 +13,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
-import { Upload, ArrowLeft, FileText, X, AlertTriangle, GraduationCap } from 'lucide-react';
+import { Upload, ArrowLeft, FileText, X, AlertTriangle, GraduationCap, Image } from 'lucide-react';
 
 interface FileEntry {
   file: File;
@@ -62,25 +62,46 @@ export default function NuevaOrden() {
     }
   }
 
+  const allowedTypes = [
+    'application/pdf',
+    'application/msword',
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    'image/png',
+    'image/jpeg',
+  ];
+  const allowedExtensions = ['.pdf', '.doc', '.docx', '.png', '.jpeg', '.jpg'];
+
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFiles = e.target.files;
     if (!selectedFiles) return;
     const newFiles: FileEntry[] = [];
     for (let i = 0; i < selectedFiles.length; i++) {
       const f = selectedFiles[i];
-      if (f.type !== 'application/pdf') { toast.error(`"${f.name}" no es un PDF.`); continue; }
+      const ext = f.name.toLowerCase().substring(f.name.lastIndexOf('.'));
+      if (!allowedTypes.includes(f.type) && !allowedExtensions.includes(ext)) {
+        toast.error(`"${f.name}" no es un formato permitido. Usá PDF, Word, PNG o JPG.`);
+        continue;
+      }
       if (f.size > 1024 * 1024 * 1024) { toast.error(`"${f.name}" supera 1GB`); continue; }
       if (files.some(fe => fe.file.name === f.name && fe.file.size === f.size)) { toast.error(`"${f.name}" ya fue agregado`); continue; }
       
-      // Count actual PDF pages
       let pageCount = 1;
-      try {
-        const arrayBuffer = await f.arrayBuffer();
-        const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
-        pageCount = pdf.numPages;
-      } catch (err) {
-        console.warn(`No se pudo leer páginas de "${f.name}", usando estimación`, err);
-        pageCount = Math.max(1, Math.round(f.size / 40000));
+      if (f.type === 'application/pdf' || ext === '.pdf') {
+        // Count actual PDF pages
+        try {
+          const arrayBuffer = await f.arrayBuffer();
+          const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+          pageCount = pdf.numPages;
+        } catch (err) {
+          console.warn(`No se pudo leer páginas de "${f.name}", usando estimación`, err);
+          pageCount = Math.max(1, Math.round(f.size / 40000));
+        }
+      } else if (f.type.startsWith('image/')) {
+        // Images = 1 page
+        pageCount = 1;
+      } else {
+        // Word docs: estimate ~1 page per 3KB of content (rough)
+        pageCount = Math.max(1, Math.round(f.size / 30000));
       }
       
       newFiles.push({ file: f, estimatedPages: pageCount, usarBeca: !!beca });
@@ -258,10 +279,10 @@ export default function NuevaOrden() {
               <div className="border-2 border-dashed rounded-lg p-8 text-center hover:border-primary/50 transition-colors cursor-pointer"
                 onClick={() => document.getElementById('file-input')?.click()}>
                 <Upload className="h-8 w-8 mx-auto mb-2 text-muted-foreground" />
-                <p className="text-muted-foreground">Hacé clic para subir tus PDFs</p>
-                <p className="text-xs text-muted-foreground mt-1">Máximo 1GB por archivo · Podés subir varios</p>
+                <p className="text-muted-foreground">Hacé clic para subir tus archivos</p>
+                <p className="text-xs text-muted-foreground mt-1">PDF, Word, PNG, JPG · Máximo 1GB por archivo · Podés subir varios</p>
               </div>
-              <input id="file-input" type="file" accept=".pdf" multiple className="hidden" onChange={handleFileChange} />
+              <input id="file-input" type="file" accept=".pdf,.doc,.docx,.png,.jpeg,.jpg" multiple className="hidden" onChange={handleFileChange} />
             </div>
 
             {/* File list with per-file beca toggle */}
