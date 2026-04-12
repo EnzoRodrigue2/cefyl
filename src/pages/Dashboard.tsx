@@ -55,6 +55,8 @@ export default function Dashboard() {
   }, []);
 
   useEffect(() => { if (user) loadData(); }, [user]);
+
+  async function loadData() {
     const [profileRes, ordenesRes, becasRes, configRes] = await Promise.all([
       supabase.from('profiles').select('*').eq('user_id', user!.id).single(),
       supabase.from('ordenes').select('*').eq('user_id', user!.id).order('created_at', { ascending: false }),
