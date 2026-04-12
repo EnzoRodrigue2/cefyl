@@ -228,7 +228,7 @@ export default function NuevaOrden() {
           }
         }
         toast.success(`¡${files.length > 1 ? `${files.length} órdenes creadas` : 'Orden creada'} exitosamente! Beca cubrió el total.`);
-        navigate('/dashboard');
+        navigate('/dashboard?pedido=confirmado');
       }
     } catch (err: any) {
       toast.error(err.message || 'Error al crear la orden');
