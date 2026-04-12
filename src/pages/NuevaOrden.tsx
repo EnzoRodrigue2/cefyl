@@ -96,12 +96,9 @@ export default function NuevaOrden() {
           console.warn(`No se pudo leer páginas de "${f.name}", usando estimación`, err);
           pageCount = Math.max(1, Math.round(f.size / 40000));
         }
-      } else if (f.type.startsWith('image/')) {
-        // Images = 1 page
-        pageCount = 1;
       } else {
-        // Word docs: estimate ~1 page per 3KB of content (rough)
-        pageCount = Math.max(1, Math.round(f.size / 30000));
+        // Word docs and images = 1 page each
+        pageCount = 1;
       }
       
       newFiles.push({ file: f, estimatedPages: pageCount, usarBeca: !!beca });
