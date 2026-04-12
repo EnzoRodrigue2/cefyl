@@ -28,13 +28,31 @@ const ESTADO_LABELS: Record<string, string> = {
 export default function Dashboard() {
   const { user, signOut, isAdmin } = useAuth();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [showConfirmation, setShowConfirmation] = useState(false);
   const [profile, setProfile] = useState<any>(null);
   const [ordenes, setOrdenes] = useState<any[]>([]);
   const [becaActiva, setBecaActiva] = useState<any>(null);
   const [becaUso, setBecaUso] = useState(0); // carillas used
   const [limiteBeca, setLimiteBeca] = useState(500);
 
-  useEffect(() => { if (user) loadData(); }, [user]);
+  useEffect(() => {
+    if (searchParams.get('pedido') === 'confirmado' || searchParams.get('status') === 'approved') {
+      setShowConfirmation(true);
+      searchParams.delete('pedido');
+      searchParams.delete('status');
+      searchParams.delete('collection_id');
+      searchParams.delete('collection_status');
+      searchParams.delete('payment_id');
+      searchParams.delete('payment_type');
+      searchParams.delete('merchant_order_id');
+      searchParams.delete('preference_id');
+      searchParams.delete('site_id');
+      searchParams.delete('processing_mode');
+      searchParams.delete('merchant_account_id');
+      setSearchParams(searchParams, { replace: true });
+    }
+  }, []);
 
   async function loadData() {
     const [profileRes, ordenesRes, becasRes, configRes] = await Promise.all([
