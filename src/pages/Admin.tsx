@@ -60,6 +60,7 @@ export default function Admin() {
   const { isAdmin, session } = useAuth();
   const navigate = useNavigate();
   const [ordenes, setOrdenes] = useState<any[]>([]);
+  const [ordenArchivos, setOrdenArchivos] = useState<any[]>([]);
   const [usuarios, setUsuarios] = useState<any[]>([]);
   const [config, setConfig] = useState<any[]>([]);
   const [becasActivas, setBecasActivas] = useState<any[]>([]);
