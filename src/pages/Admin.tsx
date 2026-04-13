@@ -193,7 +193,10 @@ export default function Admin() {
   }
   function getUserName(userId: string) {
     const u = getUserInfo(userId);
-    return u ? `${u.nombre_completo} (DNI: ${u.dni})` : userId;
+    if (u) return `${u.nombre_completo} (DNI: ${u.dni})`;
+    // Find email from ordenes if no profile
+    const orden = ordenes.find((o: any) => o.user_id === userId);
+    return orden ? `Usuario sin perfil (${userId.slice(0, 8)}...)` : userId.slice(0, 8) + '...';
   }
   function getOrderFiles(ordenId: string) {
     return ordenArchivos.filter((a: any) => a.orden_id === ordenId);
