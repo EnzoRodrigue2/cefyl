@@ -708,13 +708,16 @@ export default function Admin() {
                     <tbody>
                       {filteredOrdenes.map(o => {
                         const u = getUserInfo(o.user_id);
+                        const oFiles = getOrderFiles(o.id);
+                        const fileCount = oFiles.length || 1;
+                        const fileNames = oFiles.length > 0 ? oFiles.map((f: any) => f.archivo_nombre).join(', ') : o.archivo_nombre;
                         return (
                           <tr key={o.id} className="border-b hover:bg-muted/50">
                             <td className="py-2 px-2 whitespace-nowrap">{new Date(o.created_at).toLocaleString('es-AR')}</td>
                             <td className="py-2 px-2">{u?.nombre_completo || '—'}</td>
                             <td className="py-2 px-2">{u?.dni || '—'}</td>
                             <td className="py-2 px-2">{u?.carrera || '—'}</td>
-                            <td className="py-2 px-2 max-w-32 truncate">{o.archivo_nombre}</td>
+                            <td className="py-2 px-2 max-w-32 truncate" title={fileNames}>{fileCount > 1 ? `${fileCount} archivos` : fileNames}</td>
                             <td className="py-2 px-2 text-right">{o.cantidad_paginas}</td>
                             <td className="py-2 px-2 text-right">{o.cantidad_hojas}</td>
                             <td className="py-2 px-2">
