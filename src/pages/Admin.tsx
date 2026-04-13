@@ -224,7 +224,7 @@ export default function Admin() {
       return handleDownloadFile(orden.archivo_url, orden.archivo_nombre);
     }
   }
-
+  function getUserUso(userId: string) {
     const uso = becaUsos.find((u: any) => u.user_id === userId);
     return Number(uso?.monto_usado || 0);
   }
