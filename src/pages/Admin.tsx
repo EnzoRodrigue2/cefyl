@@ -89,15 +89,20 @@ export default function Admin() {
     loadAll();
   }, [isAdmin]);
 
-  // Realtime: reload when config changes so beca limits update everywhere
+  // Realtime: reload when config or orders change
   useEffect(() => {
     const channel = supabase
-      .channel('config-changes-admin')
+      .channel('admin-realtime')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'configuraciones' }, () => {
         loadAll();
-        // Clear DNI search result so stale limits don't show
         setDniSearchResult(null);
         setDniSearch('');
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'ordenes' }, () => {
+        loadAll();
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'orden_archivos' }, () => {
+        loadAll();
       })
       .subscribe();
     return () => { supabase.removeChannel(channel); };
