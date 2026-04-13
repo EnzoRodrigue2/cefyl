@@ -8,21 +8,17 @@ import { Progress } from '@/components/ui/progress';
 import { Printer, FileText, Clock, GraduationCap, Plus, LogOut, AlertTriangle, CheckCircle, X } from 'lucide-react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 
-const ESTADO_COLORS: Record<string, string> = {
-  borrador: 'bg-muted text-muted-foreground',
-  pendiente_pago: 'bg-warning/20 text-warning',
-  pagado: 'bg-secondary/20 text-secondary',
-  en_proceso: 'bg-primary/20 text-primary',
-  finalizada: 'bg-success/20 text-success',
-  lista_retirar: 'bg-accent/20 text-accent',
-  retirada: 'bg-muted text-muted-foreground',
-  cancelada: 'bg-destructive/20 text-destructive',
+// User-facing labels: map estado_produccion to friendly text
+const ESTADO_USUARIO_LABELS: Record<string, string> = {
+  para_hacer: 'Pendiente de impresión',
+  hecho: 'Pedido impreso',
+  retirado: 'Retirado',
 };
 
-const ESTADO_LABELS: Record<string, string> = {
-  borrador: 'Borrador', pendiente_pago: 'Pendiente de pago', pagado: 'Pagado',
-  en_proceso: 'En proceso', finalizada: 'Finalizada', lista_retirar: 'Lista para retirar',
-  retirada: 'Retirada', cancelada: 'Cancelada',
+const ESTADO_USUARIO_COLORS: Record<string, string> = {
+  para_hacer: 'bg-yellow-500/20 text-yellow-700',
+  hecho: 'bg-green-500/20 text-green-700',
+  retirado: 'bg-muted text-muted-foreground',
 };
 
 export default function Dashboard() {
