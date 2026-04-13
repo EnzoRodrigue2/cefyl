@@ -14,6 +14,7 @@ import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, Users, FileText, DollarSign, Settings, GraduationCap, Download, History, Upload, Trash2, Loader2, Minus, Search } from 'lucide-react';
 import { toast } from 'sonner';
 import * as XLSX from 'xlsx';
+import JSZip from 'jszip';
 
 const ESTADO_LABELS: Record<string, string> = {
   borrador: 'Borrador', pendiente_pago: 'Pendiente pago', pagado: 'Pagado',
