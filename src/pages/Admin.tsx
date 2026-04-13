@@ -347,33 +347,42 @@ export default function Admin() {
 
     try {
       const data = await file.arrayBuffer();
-      const wb = XLSX.read(data);
+      const wb = XLSX.read(data, { type: 'array', raw: false, codepage: 65001 });
       const ws = wb.Sheets[wb.SheetNames[0]];
-      const rows: any[] = XLSX.utils.sheet_to_json(ws, { defval: '' });
+      const rows: any[] = XLSX.utils.sheet_to_json(ws, { defval: '', rawNumbers: false });
 
       if (rows.length === 0) { toast.error('El Excel está vacío'); setUploading(false); return; }
+
+      // Debug: log headers found
+      const headers = Object.keys(rows[0]);
+      console.log('Columnas encontradas:', headers);
+      console.log('Total filas:', rows.length);
 
       const seenDnis = new Set<string>();
       const seenEmails = new Set<string>();
       let duplicatedInExcel = 0;
 
-      const users = rows.map(row => {
-        const keys = Object.keys(row);
-        const findCol = (patterns: string[]) => {
-          for (const p of patterns) {
-            const found = keys.find(k => normalizeHeaderKey(k).includes(p));
-            if (found) return row[found];
-          }
-          return '';
-        };
+      const findCol = (row: any, keys: string[], patterns: string[]) => {
+        for (const p of patterns) {
+          const found = keys.find(k => {
+            const norm = normalizeHeaderKey(k);
+            return norm === p || norm.includes(p);
+          });
+          if (found && row[found] !== undefined && row[found] !== '') return row[found];
+        }
+        return '';
+      };
 
+      const users = rows.map((row, idx) => {
+        const keys = Object.keys(row);
         return {
-          dni: cleanDniValue(findCol(['dni', 'documento'])),
-          email: cleanEmailValue(findCol(['correo', 'email', 'mail'])),
-          apellido: (findCol(['apellido']) || '').toString().trim(),
-          nombre: (findCol(['nombre']) || '').toString().trim(),
-          carrera: (findCol(['carrera']) || '').toString().trim(),
-          porcentaje_beca: parseBecaPercentage(findCol(['porcentaje', 'beca', 'porcentajedebeca'])),
+          _row: idx + 2,
+          dni: cleanDniValue(findCol(row, keys, ['dni', 'documento', 'nrodocumento'])),
+          email: cleanEmailValue(findCol(row, keys, ['correoelectronico', 'correo', 'email', 'mail'])),
+          apellido: String(findCol(row, keys, ['apellido', 'apellidos']) || '').trim(),
+          nombre: String(findCol(row, keys, ['nombre', 'nombres']) || '').trim(),
+          carrera: String(findCol(row, keys, ['carrera']) || '').trim(),
+          porcentaje_beca: parseBecaPercentage(findCol(row, keys, ['porcentajedebeca', 'porcentajebeca', 'porcentaje'])),
         };
       }).filter(u => {
         if (!u.dni || !u.email) return false;
@@ -392,22 +401,19 @@ export default function Admin() {
         return;
       }
 
-      const BATCH_SIZE = 10;
-      const MAX_CONCURRENT_BATCHES = 4;
-      let totalCreated = 0, totalSkipped = 0;
+      toast.info(`Procesando ${users.length} filas válidas...`);
+
+      const BATCH_SIZE = 15;
+      let totalCreated = 0, totalSkipped = 0, totalUpdated = 0;
       const allErrors: string[] = [];
       const batches = Array.from({ length: Math.ceil(users.length / BATCH_SIZE) }, (_, index) => ({
         number: index + 1,
         users: users.slice(index * BATCH_SIZE, (index + 1) * BATCH_SIZE),
       }));
 
-      let nextBatchIndex = 0;
-
-      const processBatch = async () => {
-        while (nextBatchIndex < batches.length) {
-          const currentIndex = nextBatchIndex++;
-          const batch = batches[currentIndex];
-
+      for (let i = 0; i < batches.length; i++) {
+        const batch = batches[i];
+        try {
           const { data: result, error } = await supabase.functions.invoke('bulk-create-users', {
             body: { users: batch.users },
           });
@@ -420,26 +426,29 @@ export default function Admin() {
           if (result) {
             totalCreated += result.created || 0;
             totalSkipped += result.skipped || 0;
+            totalUpdated += result.updated || 0;
             if (result.errors?.length) {
               allErrors.push(...result.errors.map((message: string) => `Lote ${batch.number}: ${message}`));
             }
           }
+        } catch (batchErr: any) {
+          allErrors.push(`Lote ${batch.number}: ${batchErr.message}`);
         }
-      };
-
-      await Promise.all(
-        Array.from({ length: Math.min(MAX_CONCURRENT_BATCHES, batches.length) }, () => processBatch())
-      );
+      }
 
       if (duplicatedInExcel > 0) {
         totalSkipped += duplicatedInExcel;
-        allErrors.push(`${duplicatedInExcel} filas duplicadas en el Excel fueron omitidas antes de importar.`);
+        allErrors.push(`${duplicatedInExcel} filas duplicadas en el Excel fueron omitidas.`);
       }
 
-      toast.success(`✅ ${totalCreated} usuarios creados, ${totalSkipped} omitidos`);
+      const parts = [`✅ ${totalCreated} creados`];
+      if (totalUpdated > 0) parts.push(`${totalUpdated} becas actualizadas`);
+      parts.push(`${totalSkipped} omitidos`);
+      toast.success(parts.join(', '));
+
       if (allErrors.length > 0) {
-        console.warn('Errores:', allErrors);
-        toast.warning(`${allErrors.length} incidencias. Revisá la consola.`);
+        console.warn('Errores de importación:', allErrors);
+        toast.warning(`${allErrors.length} incidencias. Revisá la consola (F12).`);
       }
       loadAll();
     } catch (err: any) {
