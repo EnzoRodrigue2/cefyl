@@ -66,7 +66,9 @@ export default function Dashboard() {
   async function loadData() {
     const [profileRes, ordenesRes, becasRes, configRes] = await Promise.all([
       supabase.from('profiles').select('*').eq('user_id', user!.id).single(),
-      supabase.from('ordenes').select('*').eq('user_id', user!.id).order('created_at', { ascending: false }),
+      supabase.from('ordenes').select('*').eq('user_id', user!.id)
+        .in('estado', ['pagado', 'en_proceso', 'finalizada', 'lista_retirar', 'retirada'])
+        .order('created_at', { ascending: false }),
       supabase.from('becas').select('*').eq('user_id', user!.id).eq('estado', 'aprobada').maybeSingle(),
       supabase.from('configuraciones').select('*'),
     ]);
@@ -220,7 +222,9 @@ export default function Dashboard() {
                         </p>
                       </div>
                     </div>
-                    <Badge className={ESTADO_COLORS[o.estado] || ''}>{ESTADO_LABELS[o.estado] || o.estado}</Badge>
+                    <Badge className={ESTADO_USUARIO_COLORS[o.estado_produccion] || 'bg-muted text-muted-foreground'}>
+                      {ESTADO_USUARIO_LABELS[o.estado_produccion] || o.estado_produccion}
+                    </Badge>
                   </div>
                 ))}
               </div>
