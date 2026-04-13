@@ -106,15 +106,17 @@ export default function Admin() {
   async function loadAll() {
     const today = new Date().toISOString().split('T')[0];
     const now = new Date();
-    const [ordenesRes, usersRes, configRes, becasActRes, usoRes] = await Promise.all([
+    const [ordenesRes, usersRes, configRes, becasActRes, usoRes, archivosRes] = await Promise.all([
       supabase.from('ordenes').select('*').order('created_at', { ascending: false }).limit(200),
       supabase.from('profiles').select('*').order('created_at', { ascending: false }),
       supabase.from('configuraciones').select('*'),
       supabase.from('becas').select('*').eq('estado', 'aprobada'),
       supabase.from('beca_uso_mensual').select('*').eq('mes', now.getMonth() + 1).eq('anio', now.getFullYear()),
+      supabase.from('orden_archivos').select('*'),
     ]);
     const ords = ordenesRes.data || [];
     setOrdenes(ords);
+    setOrdenArchivos(archivosRes.data || []);
     setUsuarios(usersRes.data || []);
     setConfig(configRes.data || []);
     setBecasActivas(becasActRes.data || []);
