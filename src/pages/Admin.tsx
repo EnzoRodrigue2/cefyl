@@ -87,6 +87,20 @@ export default function Admin() {
     loadAll();
   }, [isAdmin]);
 
+  // Realtime: reload when config changes so beca limits update everywhere
+  useEffect(() => {
+    const channel = supabase
+      .channel('config-changes-admin')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'configuraciones' }, () => {
+        loadAll();
+        // Clear DNI search result so stale limits don't show
+        setDniSearchResult(null);
+        setDniSearch('');
+      })
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, []);
+
   async function loadAll() {
     const today = new Date().toISOString().split('T')[0];
     const now = new Date();

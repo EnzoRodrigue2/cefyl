@@ -56,6 +56,17 @@ export default function Dashboard() {
 
   useEffect(() => { if (user) loadData(); }, [user]);
 
+  // Realtime: reload when config changes (e.g. admin updates beca limits)
+  useEffect(() => {
+    const channel = supabase
+      .channel('config-changes-dashboard')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'configuraciones' }, () => {
+        if (user) loadData();
+      })
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [user]);
+
   async function loadData() {
     const [profileRes, ordenesRes, becasRes, configRes] = await Promise.all([
       supabase.from('profiles').select('*').eq('user_id', user!.id).single(),
