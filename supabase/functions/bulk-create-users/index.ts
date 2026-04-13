@@ -21,80 +21,118 @@ const parseBecaPercentage = (value: unknown) => {
   return 0;
 };
 
+async function verifyAdmin(req: Request) {
+  const authHeader = req.headers.get("Authorization");
+  if (!authHeader) throw new Error("No authorization");
+
+  const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+  const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+
+  const callerClient = createClient(
+    supabaseUrl,
+    Deno.env.get("SUPABASE_PUBLISHABLE_KEY") || serviceRoleKey,
+    { global: { headers: { Authorization: authHeader } } }
+  );
+  const { data: { user: caller } } = await callerClient.auth.getUser();
+  if (!caller) throw new Error("Unauthorized");
+
+  const adminClient = createClient(supabaseUrl, serviceRoleKey);
+  const { data: isAdmin } = await adminClient.rpc("has_role", {
+    _user_id: caller.id,
+    _role: "admin",
+  });
+  if (!isAdmin) throw new Error("Not admin");
+
+  return adminClient;
+}
+
+async function handleDeleteAll(adminClient: ReturnType<typeof createClient>) {
+  const { data: adminRoles } = await adminClient
+    .from("user_roles")
+    .select("user_id")
+    .eq("role", "admin");
+  const adminIds = (adminRoles || []).map((r: any) => r.user_id);
+
+  const { data: allProfiles } = await adminClient
+    .from("profiles")
+    .select("user_id");
+
+  let deleted = 0;
+  for (const p of allProfiles || []) {
+    if (adminIds.includes(p.user_id)) continue;
+    const tables = ["ordenes", "becas", "beca_uso_mensual", "turnos", "pagos", "profiles", "user_roles"];
+    for (const table of tables) {
+      await adminClient.from(table).delete().eq("user_id", p.user_id);
+    }
+    await adminClient.auth.admin.deleteUser(p.user_id);
+    deleted++;
+  }
+  return { success: true, deleted };
+}
+
+async function upsertBeca(
+  adminClient: ReturnType<typeof createClient>,
+  userId: string,
+  porcentajeBeca: number,
+  email: string,
+  results: { updated: number; errors: string[] }
+) {
+  if (porcentajeBeca !== 50 && porcentajeBeca !== 100) return;
+
+  const tipo = porcentajeBeca.toString() as any;
+
+  // Check if user already has an active beca
+  const { data: existingBecas } = await adminClient
+    .from("becas")
+    .select("id, tipo, estado")
+    .eq("user_id", userId)
+    .eq("estado", "aprobada");
+
+  const activeBeca = (existingBecas || [])[0];
+
+  if (activeBeca && activeBeca.tipo === tipo) {
+    // Same beca already exists, skip
+    return;
+  }
+
+  if (activeBeca && activeBeca.tipo !== tipo) {
+    // Different beca, update it
+    const { error } = await adminClient
+      .from("becas")
+      .update({ tipo, fecha_inicio: new Date().toISOString().split("T")[0] })
+      .eq("id", activeBeca.id);
+    if (error) {
+      results.errors.push(`Error actualizando beca de ${email}: ${error.message}`);
+    } else {
+      results.updated++;
+    }
+    return;
+  }
+
+  // No active beca, create one
+  const { error } = await adminClient.from("becas").insert({
+    user_id: userId,
+    tipo,
+    estado: "aprobada" as any,
+    fecha_inicio: new Date().toISOString().split("T")[0],
+  });
+  if (error) {
+    results.errors.push(`Error asignando beca a ${email}: ${error.message}`);
+  }
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
 
   try {
-    const authHeader = req.headers.get("Authorization");
-    if (!authHeader) {
-      return new Response(JSON.stringify({ error: "No authorization" }), {
-        status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
-    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-    const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-
-    const callerClient = createClient(
-      supabaseUrl,
-      Deno.env.get("SUPABASE_PUBLISHABLE_KEY") || serviceRoleKey,
-      { global: { headers: { Authorization: authHeader } } }
-    );
-    const {
-      data: { user: caller },
-    } = await callerClient.auth.getUser();
-
-    if (!caller) {
-      return new Response(JSON.stringify({ error: "Unauthorized" }), {
-        status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
-    const adminClient = createClient(supabaseUrl, serviceRoleKey);
-    const { data: isAdmin } = await adminClient.rpc("has_role", {
-      _user_id: caller.id,
-      _role: "admin",
-    });
-
-    if (!isAdmin) {
-      return new Response(JSON.stringify({ error: "Not admin" }), {
-        status: 403,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
+    const adminClient = await verifyAdmin(req);
     const { users, action } = await req.json();
 
     if (action === "delete_all") {
-      const { data: adminRoles } = await adminClient
-        .from("user_roles")
-        .select("user_id")
-        .eq("role", "admin");
-      const adminIds = (adminRoles || []).map((r: any) => r.user_id);
-
-      const { data: allProfiles } = await adminClient
-        .from("profiles")
-        .select("user_id");
-
-      let deleted = 0;
-      for (const p of allProfiles || []) {
-        if (adminIds.includes(p.user_id)) continue;
-        await adminClient.from("ordenes").delete().eq("user_id", p.user_id);
-        await adminClient.from("becas").delete().eq("user_id", p.user_id);
-        await adminClient.from("beca_uso_mensual").delete().eq("user_id", p.user_id);
-        await adminClient.from("turnos").delete().eq("user_id", p.user_id);
-        await adminClient.from("pagos").delete().eq("user_id", p.user_id);
-        await adminClient.from("profiles").delete().eq("user_id", p.user_id);
-        await adminClient.from("user_roles").delete().eq("user_id", p.user_id);
-        await adminClient.auth.admin.deleteUser(p.user_id);
-        deleted++;
-      }
-
-      return new Response(JSON.stringify({ success: true, deleted }), {
+      const result = await handleDeleteAll(adminClient);
+      return new Response(JSON.stringify(result), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
@@ -106,33 +144,18 @@ Deno.serve(async (req) => {
       });
     }
 
-    const results = { created: 0, skipped: 0, errors: [] as string[] };
-    const uniqueUsers = [] as Array<{
-      email: string;
-      apellido: string;
-      nombre: string;
-      carrera: string;
-      dni: string;
-      porcentaje_beca: number;
-    }>;
+    const results = { created: 0, skipped: 0, updated: 0, errors: [] as string[] };
+
+    // Deduplicate within the batch
+    const uniqueUsers: typeof users = [];
     const seenDnis = new Set<string>();
     const seenEmails = new Set<string>();
 
     for (const rawUser of users) {
       const email = normalizeEmail(rawUser.email);
       const dni = normalizeDni(rawUser.dni);
-
-      if (!dni || !email) {
-        results.errors.push(`Fila sin DNI o email: ${JSON.stringify(rawUser)}`);
-        results.skipped++;
-        continue;
-      }
-
-      if (seenDnis.has(dni) || seenEmails.has(email)) {
-        results.skipped++;
-        continue;
-      }
-
+      if (!dni || !email) { results.skipped++; continue; }
+      if (seenDnis.has(dni) || seenEmails.has(email)) { results.skipped++; continue; }
       seenDnis.add(dni);
       seenEmails.add(email);
       uniqueUsers.push({
@@ -145,89 +168,56 @@ Deno.serve(async (req) => {
       });
     }
 
-    const emails = uniqueUsers.map((user) => user.email);
-    const dnis = uniqueUsers.map((user) => user.dni);
+    // Process users sequentially to avoid race conditions
+    for (const user of uniqueUsers) {
+      const nombreCompleto = `${user.apellido} ${user.nombre}`.trim();
 
-    const [existingEmailsRes, existingDnisRes] = await Promise.all([
-      emails.length
-        ? adminClient.from("profiles").select("email").in("email", emails)
-        : Promise.resolve({ data: [], error: null }),
-      dnis.length
-        ? adminClient.from("profiles").select("dni").in("dni", dnis)
-        : Promise.resolve({ data: [], error: null }),
-    ]);
+      // Check if user already exists by DNI or email
+      const { data: existingProfile } = await adminClient
+        .from("profiles")
+        .select("user_id")
+        .or(`dni.eq.${user.dni},email.eq.${user.email}`)
+        .limit(1)
+        .maybeSingle();
 
-    if (existingEmailsRes.error) throw existingEmailsRes.error;
-    if (existingDnisRes.error) throw existingDnisRes.error;
-
-    const existingEmails = new Set(
-      (existingEmailsRes.data || []).map((profile: any) => normalizeEmail(profile.email))
-    );
-    const existingDnis = new Set(
-      (existingDnisRes.data || []).map((profile: any) => normalizeDni(profile.dni))
-    );
-
-    const usersToCreate = uniqueUsers.filter((user) => {
-      if (existingEmails.has(user.email) || existingDnis.has(user.dni)) {
+      if (existingProfile) {
+        // User exists — just update beca if needed
+        await upsertBeca(adminClient, existingProfile.user_id, user.porcentaje_beca, user.email, results);
         results.skipped++;
-        return false;
+        continue;
       }
 
-      existingEmails.add(user.email);
-      existingDnis.add(user.dni);
-      return true;
-    });
+      // Create new user
+      const { data: newUser, error: createError } = await adminClient.auth.admin.createUser({
+        email: user.email,
+        password: user.dni,
+        email_confirm: true,
+        user_metadata: {
+          nombre_completo: nombreCompleto,
+          dni: user.dni,
+          carrera: user.carrera,
+        },
+      });
 
-    let cursor = 0;
-    const concurrency = Math.min(4, usersToCreate.length || 1);
-
-    const processUser = async () => {
-      while (cursor < usersToCreate.length) {
-        const user = usersToCreate[cursor++];
-        const nombreCompleto = `${user.apellido} ${user.nombre}`.trim();
-
-        const { data: newUser, error: createError } = await adminClient.auth.admin.createUser({
-          email: user.email,
-          password: user.dni,
-          email_confirm: true,
-          user_metadata: {
-            nombre_completo: nombreCompleto,
-            dni: user.dni,
-            carrera: user.carrera,
-          },
-        });
-
-        if (createError || !newUser?.user) {
-          results.errors.push(`Error creando ${user.email}: ${createError?.message || "No se pudo crear el usuario"}`);
-          results.skipped++;
-          continue;
-        }
-
-        if (user.porcentaje_beca === 50 || user.porcentaje_beca === 100) {
-          const { error: becaError } = await adminClient.from("becas").insert({
-            user_id: newUser.user.id,
-            tipo: user.porcentaje_beca.toString() as any,
-            estado: "aprobada" as any,
-            fecha_inicio: new Date().toISOString().split("T")[0],
-          });
-
-          if (becaError) {
-            results.errors.push(`Error asignando beca a ${user.email}: ${becaError.message}`);
-          }
-        }
-
-        results.created++;
+      if (createError || !newUser?.user) {
+        results.errors.push(`Error creando ${user.email}: ${createError?.message || "No se pudo crear"}`);
+        results.skipped++;
+        continue;
       }
-    };
 
-    await Promise.all(Array.from({ length: concurrency }, () => processUser()));
+      // Assign beca if applicable
+      await upsertBeca(adminClient, newUser.user.id, user.porcentaje_beca, user.email, results);
+      results.created++;
+    }
 
     return new Response(JSON.stringify({ success: true, ...results }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (err) {
+    const status = (err as Error).message === "Not admin" ? 403 : 
+                   (err as Error).message === "Unauthorized" ? 401 : 500;
     return new Response(JSON.stringify({ error: (err as Error).message }), {
-      status: 500,
+      status,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
