@@ -101,6 +101,7 @@ Deno.serve(async (req) => {
           failure: back_url || `${supabaseUrl}`,
           pending: back_url || `${supabaseUrl}`,
         },
+        notification_url: `${supabaseUrl}/functions/v1/mp-webhook?topic=payment`,
         auto_return: "approved",
         external_reference: orden_ids.join(","),
         statement_descriptor: "IMPRESIONES CEFYL",

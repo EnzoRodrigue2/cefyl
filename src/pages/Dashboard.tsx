@@ -7,6 +7,21 @@ import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { Printer, FileText, Clock, GraduationCap, Plus, LogOut, AlertTriangle, CheckCircle, X } from 'lucide-react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
+import { toast } from 'sonner';
+
+const PAYMENT_QUERY_KEYS = [
+  'pedido',
+  'status',
+  'collection_id',
+  'collection_status',
+  'payment_id',
+  'payment_type',
+  'merchant_order_id',
+  'preference_id',
+  'site_id',
+  'processing_mode',
+  'merchant_account_id',
+];
 
 // User-facing labels: map estado_produccion to friendly text
 const ESTADO_USUARIO_LABELS: Record<string, string> = {
@@ -32,23 +47,61 @@ export default function Dashboard() {
   const [becaUso, setBecaUso] = useState(0); // carillas used
   const [limiteBeca, setLimiteBeca] = useState(500);
 
-  useEffect(() => {
-    if (searchParams.get('pedido') === 'confirmado' || searchParams.get('status') === 'approved') {
-      setShowConfirmation(true);
-      searchParams.delete('pedido');
-      searchParams.delete('status');
-      searchParams.delete('collection_id');
-      searchParams.delete('collection_status');
-      searchParams.delete('payment_id');
-      searchParams.delete('payment_type');
-      searchParams.delete('merchant_order_id');
-      searchParams.delete('preference_id');
-      searchParams.delete('site_id');
-      searchParams.delete('processing_mode');
-      searchParams.delete('merchant_account_id');
-      setSearchParams(searchParams, { replace: true });
+  const clearPaymentParams = () => {
+    const nextParams = new URLSearchParams(searchParams);
+    PAYMENT_QUERY_KEYS.forEach((key) => nextParams.delete(key));
+    setSearchParams(nextParams, { replace: true });
+  };
+
+  async function confirmMercadoPagoPayment(paymentId: string) {
+    const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/mp-webhook?topic=payment`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+      },
+      body: JSON.stringify({ data: { id: paymentId } }),
+    });
+
+    const payload = await response.json().catch(() => null);
+
+    if (!response.ok) {
+      throw new Error(payload?.error || 'No se pudo confirmar el pago');
     }
-  }, []);
+  }
+
+  useEffect(() => {
+    const pedidoConfirmado = searchParams.get('pedido') === 'confirmado';
+    const paymentId = searchParams.get('payment_id') || searchParams.get('collection_id');
+    const pagoAprobado = searchParams.get('status') === 'approved' && !!paymentId;
+
+    if (!pedidoConfirmado && !pagoAprobado) return;
+
+    let active = true;
+
+    const syncPaymentReturn = async () => {
+      try {
+        if (pagoAprobado && paymentId) {
+          await confirmMercadoPagoPayment(paymentId);
+          if (user && active) await loadData();
+        }
+
+        if (active) setShowConfirmation(true);
+      } catch (error) {
+        if (active) {
+          toast.error('El pago volvió aprobado, pero todavía se está validando. Recargá en unos segundos si no aparece.');
+        }
+      } finally {
+        if (active) clearPaymentParams();
+      }
+    };
+
+    void syncPaymentReturn();
+
+    return () => {
+      active = false;
+    };
+  }, [searchParams, setSearchParams, user]);
 
   useEffect(() => { if (user) loadData(); }, [user]);
 
