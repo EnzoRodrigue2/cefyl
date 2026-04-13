@@ -696,7 +696,7 @@ export default function Admin() {
                         <th className="text-left py-2 px-2 font-medium text-muted-foreground">Usuario</th>
                         <th className="text-left py-2 px-2 font-medium text-muted-foreground">DNI</th>
                         <th className="text-left py-2 px-2 font-medium text-muted-foreground">Carrera</th>
-                        <th className="text-left py-2 px-2 font-medium text-muted-foreground">Archivo</th>
+                        <th className="text-left py-2 px-2 font-medium text-muted-foreground">Archivos</th>
                         <th className="text-right py-2 px-2 font-medium text-muted-foreground">Carillas</th>
                         <th className="text-right py-2 px-2 font-medium text-muted-foreground">Hojas</th>
                         <th className="text-left py-2 px-2 font-medium text-muted-foreground">Opciones</th>
