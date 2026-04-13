@@ -184,7 +184,47 @@ export default function Admin() {
     const u = getUserInfo(userId);
     return u ? `${u.nombre_completo} (DNI: ${u.dni})` : userId;
   }
-  function getUserUso(userId: string) {
+  function getOrderFiles(ordenId: string) {
+    return ordenArchivos.filter((a: any) => a.orden_id === ordenId);
+  }
+
+  // Download all files for an order as a zip named after the user
+  async function handleDownloadAllFiles(orden: any) {
+    const files = getOrderFiles(orden.id);
+    const userName = getUserInfo(orden.user_id)?.nombre_completo || 'usuario';
+    const safeName = userName.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-zA-Z0-9 _-]/g, '').replace(/\s+/g, '_');
+
+    // If there are files in orden_archivos, use them; otherwise fall back to legacy single file
+    if (files.length > 0) {
+      if (files.length === 1) {
+        // Single file: download directly
+        return handleDownloadFile(files[0].archivo_url, files[0].archivo_nombre);
+      }
+      toast.info('Generando archivo comprimido...');
+      const zip = new JSZip();
+      for (const f of files) {
+        try {
+          const { data, error } = await supabase.storage.from('print-files').download(f.archivo_url);
+          if (error || !data) { toast.error(`Error descargando ${f.archivo_nombre}`); continue; }
+          zip.file(f.archivo_nombre, data);
+        } catch (err: any) {
+          toast.error(`Error: ${err.message}`);
+        }
+      }
+      const blob = await zip.generateAsync({ type: 'blob' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${safeName}_pedido.zip`;
+      a.click();
+      URL.revokeObjectURL(url);
+      toast.success('Archivos descargados');
+    } else if (orden.archivo_url) {
+      // Legacy: single file stored on the order itself
+      return handleDownloadFile(orden.archivo_url, orden.archivo_nombre);
+    }
+  }
+
     const uso = becaUsos.find((u: any) => u.user_id === userId);
     return Number(uso?.monto_usado || 0);
   }
