@@ -190,6 +190,44 @@ export type Database = {
           },
         ]
       }
+      orden_archivos: {
+        Row: {
+          archivo_nombre: string
+          archivo_url: string
+          cantidad_hojas: number
+          cantidad_paginas: number
+          created_at: string | null
+          id: string
+          orden_id: string
+        }
+        Insert: {
+          archivo_nombre: string
+          archivo_url: string
+          cantidad_hojas?: number
+          cantidad_paginas?: number
+          created_at?: string | null
+          id?: string
+          orden_id: string
+        }
+        Update: {
+          archivo_nombre?: string
+          archivo_url?: string
+          cantidad_hojas?: number
+          cantidad_paginas?: number
+          created_at?: string | null
+          id?: string
+          orden_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "orden_archivos_orden_id_fkey"
+            columns: ["orden_id"]
+            isOneToOne: false
+            referencedRelation: "ordenes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       ordenes: {
         Row: {
           anillado: boolean | null

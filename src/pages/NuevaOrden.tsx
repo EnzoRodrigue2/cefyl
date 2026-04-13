@@ -25,14 +25,14 @@ export default function NuevaOrden() {
   const { user } = useAuth();
   const navigate = useNavigate();
   const [files, setFiles] = useState<FileEntry[]>([]);
-  const [simpleFaz, setSimpleFaz] = useState(false); // default is doble faz
+  const [simpleFaz, setSimpleFaz] = useState(false);
   const [color, setColor] = useState(false);
   const [anillado, setAnillado] = useState(false);
   const [comentarios, setComentarios] = useState('');
   const [loading, setLoading] = useState(false);
   const [config, setConfig] = useState<Record<string, number>>({});
   const [beca, setBeca] = useState<any>(null);
-  const [becaUso, setBecaUso] = useState(0); // carillas used this month
+  const [becaUso, setBecaUso] = useState(0);
   const [limiteBeca, setLimiteBeca] = useState(500);
 
   const dobleFaz = !simpleFaz;
@@ -87,7 +87,6 @@ export default function NuevaOrden() {
       
       let pageCount = 1;
       if (f.type === 'application/pdf' || ext === '.pdf') {
-        // Count actual PDF pages
         try {
           const arrayBuffer = await f.arrayBuffer();
           const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
@@ -97,7 +96,6 @@ export default function NuevaOrden() {
           pageCount = Math.max(1, Math.round(f.size / 40000));
         }
       } else {
-        // Word docs and images = 1 page each
         pageCount = 1;
       }
       
@@ -120,24 +118,20 @@ export default function NuevaOrden() {
     return config.anillado_101_plus || 1200;
   }
 
-  // carillas = pages (each page prints on one side)
-  // hojas: simple faz = 1 page per sheet, doble faz = 2 pages per sheet
   function calcFilePrice(f: FileEntry) {
-    const carillas = f.estimatedPages; // each page = 1 carilla
+    const carillas = f.estimatedPages;
     const hojas = dobleFaz ? Math.ceil(carillas / 2) : carillas;
     const precioPorHoja = dobleFaz ? precioDoble : precioSimple;
     let base = hojas * precioPorHoja;
     if (color) base += hojas * precioColor;
     if (anillado) base += getAnilladoPrice(hojas);
 
-    // Beca: discount based on carillas within limit
     let carillasConBeca = 0;
     let descuento = 0;
     if (f.usarBeca && beca) {
       const carillasDisponibles = Math.max(0, limiteBeca - becaUso);
       carillasConBeca = Math.min(carillas, carillasDisponibles);
       const descPct = beca.tipo === '100' ? 100 : beca.tipo === '50' ? 50 : 0;
-      // Price per carilla
       const precioPorCarilla = base / carillas;
       descuento = carillasConBeca * precioPorCarilla * (descPct / 100);
     }
@@ -158,43 +152,53 @@ export default function NuevaOrden() {
     if (files.length === 0 || !user) return;
     setLoading(true);
     try {
-      const createdOrderIds: string[] = [];
+      // 1. Create a single order with aggregated totals
+      const usarBecaGlobal = files.some(f => f.usarBeca) && !!beca;
+      const { data: orderData, error: orderError } = await supabase.from('ordenes').insert({
+        user_id: user.id,
+        archivo_url: '', // no longer used for single file
+        archivo_nombre: files.length === 1 ? files[0].file.name : `${files.length} archivos`,
+        cantidad_paginas: totalCarillas,
+        doble_faz: dobleFaz,
+        color,
+        anillado,
+        usar_beca: usarBecaGlobal,
+        comentarios,
+        cantidad_hojas: totalHojas,
+        precio_base: totalBase,
+        descuento_beca: totalDescuento,
+        monto_final: totalFinal,
+        estado: 'pendiente_pago',
+      }).select('id').single();
+
+      if (orderError) throw new Error(`Error creando orden: ${orderError.message}`);
+      const orderId = orderData.id;
+
+      // 2. Upload each file and create orden_archivos records
       for (let i = 0; i < files.length; i++) {
-        const { file, estimatedPages, usarBeca } = files[i];
-        const { hojas, base, descuento, final: montoFinal, carillasConBeca } = totals[i];
+        const { file, estimatedPages } = files[i];
+        const { hojas } = totals[i];
         const safeName = file.name.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-zA-Z0-9._-]/g, '_');
         const filePath = `${user.id}/${Date.now()}_${safeName}`;
         const { error: uploadError } = await supabase.storage.from('print-files').upload(filePath, file);
         if (uploadError) throw new Error(`Error subiendo "${file.name}": ${uploadError.message}`);
 
-        const { data: orderData, error: orderError } = await supabase.from('ordenes').insert({
-          user_id: user.id,
+        const { error: archivoError } = await supabase.from('orden_archivos').insert({
+          orden_id: orderId,
           archivo_url: filePath,
           archivo_nombre: file.name,
           cantidad_paginas: estimatedPages,
-          doble_faz: dobleFaz,
-          color,
-          anillado,
-          usar_beca: usarBeca && !!beca,
-          comentarios,
           cantidad_hojas: hojas,
-          precio_base: base,
-          descuento_beca: descuento,
-          monto_final: montoFinal,
-          estado: 'pendiente_pago',
-        }).select('id').single();
-        if (orderError) throw new Error(`Error creando orden para "${file.name}": ${orderError.message}`);
-        createdOrderIds.push(orderData.id);
-
-        // Beca usage is updated by the webhook after payment confirmation
+        });
+        if (archivoError) throw new Error(`Error registrando "${file.name}": ${archivoError.message}`);
       }
 
-      // If total > 0, redirect to Mercado Pago
+      // 3. Payment flow
       if (totalFinal > 0) {
         toast.info('Redirigiendo a Mercado Pago...');
         const { data: mpData, error: mpError } = await supabase.functions.invoke('create-mp-preference', {
           body: {
-            orden_ids: createdOrderIds,
+            orden_ids: [orderId],
             back_url: window.location.origin + '/dashboard',
           },
         });
@@ -205,30 +209,26 @@ export default function NuevaOrden() {
           window.location.href = mpData.init_point;
         }
       } else {
-        // Beca covers 100% — mark as pagado immediately and update beca usage
-        for (let i = 0; i < files.length; i++) {
-          const { usarBeca } = files[i];
-          const { carillasConBeca } = totals[i];
-          await supabase.from('ordenes').update({ estado: 'pagado' }).eq('id', createdOrderIds[i]);
+        // Beca covers 100%
+        await supabase.from('ordenes').update({ estado: 'pagado' }).eq('id', orderId);
 
-          if (usarBeca && beca && carillasConBeca > 0) {
-            const now = new Date();
-            const mes = now.getMonth() + 1;
-            const anio = now.getFullYear();
-            const { data: existing } = await supabase.from('beca_uso_mensual')
-              .select('*').eq('user_id', user!.id).eq('mes', mes).eq('anio', anio).maybeSingle();
-            if (existing) {
-              await supabase.from('beca_uso_mensual').update({
-                monto_usado: Number(existing.monto_usado || 0) + carillasConBeca
-              }).eq('id', existing.id);
-            } else {
-              await supabase.from('beca_uso_mensual').insert({
-                user_id: user!.id, mes, anio, monto_usado: carillasConBeca
-              });
-            }
+        if (usarBecaGlobal && totalCarillasBeca > 0) {
+          const now = new Date();
+          const mes = now.getMonth() + 1;
+          const anio = now.getFullYear();
+          const { data: existing } = await supabase.from('beca_uso_mensual')
+            .select('*').eq('user_id', user!.id).eq('mes', mes).eq('anio', anio).maybeSingle();
+          if (existing) {
+            await supabase.from('beca_uso_mensual').update({
+              monto_usado: Number(existing.monto_usado || 0) + totalCarillasBeca
+            }).eq('id', existing.id);
+          } else {
+            await supabase.from('beca_uso_mensual').insert({
+              user_id: user!.id, mes, anio, monto_usado: totalCarillasBeca
+            });
           }
         }
-        toast.success(`¡${files.length > 1 ? `${files.length} órdenes creadas` : 'Orden creada'} exitosamente! Beca cubrió el total.`);
+        toast.success('¡Orden creada exitosamente! Beca cubrió el total.');
         navigate('/dashboard?pedido=confirmado');
       }
     } catch (err: any) {
@@ -314,7 +314,7 @@ export default function NuevaOrden() {
               </div>
             )}
 
-            {/* Options - default is doble faz */}
+            {/* Options */}
             <div className="grid grid-cols-2 gap-4">
               <div className="flex items-center justify-between p-3 rounded-lg border">
                 <Label>Simple faz</Label>
@@ -344,7 +344,7 @@ export default function NuevaOrden() {
             {files.length > 0 && (
               <div className="rounded-lg bg-muted p-4 space-y-2">
                 <div className="flex justify-between text-sm">
-                  <span>Carillas totales: {totalCarillas} · Hojas: {totalHojas}</span>
+                  <span>Carillas totales: {totalCarillas} · Hojas: {totalHojas} · {files.length} archivo{files.length > 1 ? 's' : ''}</span>
                   <span>{dobleFaz ? 'Doble faz' : 'Simple faz'} · ${(dobleFaz ? precioDoble : precioSimple)}/hoja{color ? ` + $${precioColor}/color` : ''}</span>
                 </div>
                 <div className="flex justify-between text-sm">
@@ -352,18 +352,15 @@ export default function NuevaOrden() {
                   <span>${totalBase.toLocaleString('es-AR')}</span>
                 </div>
                 {totalDescuento > 0 && (
-                  <>
-                    <div className="flex justify-between text-sm text-primary">
-                      <span>Descuento beca ({totalCarillasBeca} carillas cubiertas)</span>
-                      <span>-${totalDescuento.toLocaleString('es-AR')}</span>
-                    </div>
-                  </>
+                  <div className="flex justify-between text-sm text-primary">
+                    <span>Descuento beca ({totalCarillasBeca} carillas cubiertas)</span>
+                    <span>-${totalDescuento.toLocaleString('es-AR')}</span>
+                  </div>
                 )}
                 <div className="flex justify-between font-bold text-lg border-t pt-2">
                   <span>Total</span>
                   <span>${totalFinal.toLocaleString('es-AR')}</span>
                 </div>
-                {files.length > 1 && <p className="text-xs text-muted-foreground">Se crearán {files.length} órdenes individuales</p>}
               </div>
             )}
 

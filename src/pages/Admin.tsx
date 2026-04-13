@@ -14,6 +14,7 @@ import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, Users, FileText, DollarSign, Settings, GraduationCap, Download, History, Upload, Trash2, Loader2, Minus, Search } from 'lucide-react';
 import { toast } from 'sonner';
 import * as XLSX from 'xlsx';
+import JSZip from 'jszip';
 
 const ESTADO_LABELS: Record<string, string> = {
   borrador: 'Borrador', pendiente_pago: 'Pendiente pago', pagado: 'Pagado',
@@ -59,6 +60,7 @@ export default function Admin() {
   const { isAdmin, session } = useAuth();
   const navigate = useNavigate();
   const [ordenes, setOrdenes] = useState<any[]>([]);
+  const [ordenArchivos, setOrdenArchivos] = useState<any[]>([]);
   const [usuarios, setUsuarios] = useState<any[]>([]);
   const [config, setConfig] = useState<any[]>([]);
   const [becasActivas, setBecasActivas] = useState<any[]>([]);
@@ -104,15 +106,17 @@ export default function Admin() {
   async function loadAll() {
     const today = new Date().toISOString().split('T')[0];
     const now = new Date();
-    const [ordenesRes, usersRes, configRes, becasActRes, usoRes] = await Promise.all([
+    const [ordenesRes, usersRes, configRes, becasActRes, usoRes, archivosRes] = await Promise.all([
       supabase.from('ordenes').select('*').order('created_at', { ascending: false }).limit(200),
       supabase.from('profiles').select('*').order('created_at', { ascending: false }),
       supabase.from('configuraciones').select('*'),
       supabase.from('becas').select('*').eq('estado', 'aprobada'),
       supabase.from('beca_uso_mensual').select('*').eq('mes', now.getMonth() + 1).eq('anio', now.getFullYear()),
+      supabase.from('orden_archivos').select('*'),
     ]);
     const ords = ordenesRes.data || [];
     setOrdenes(ords);
+    setOrdenArchivos(archivosRes.data || []);
     setUsuarios(usersRes.data || []);
     setConfig(configRes.data || []);
     setBecasActivas(becasActRes.data || []);
@@ -134,13 +138,19 @@ export default function Admin() {
 
   async function deleteOrden(id: string, archivoUrl: string) {
     try {
+      // Get all files for this order
+      const oFiles = getOrderFiles(id);
+      const fileUrls = oFiles.map((f: any) => f.archivo_url);
+      if (archivoUrl) fileUrls.push(archivoUrl); // legacy single file
+
       await Promise.all([
+        supabase.from('orden_archivos').delete().eq('orden_id', id),
         supabase.from('turnos').delete().eq('orden_id', id),
         supabase.from('pagos').delete().eq('orden_id', id),
         supabase.from('movimientos_financieros').delete().eq('orden_id', id),
       ]);
-      if (archivoUrl) {
-        await supabase.storage.from('print-files').remove([archivoUrl]);
+      if (fileUrls.length > 0) {
+        await supabase.storage.from('print-files').remove(fileUrls.filter(Boolean));
       }
       const { error } = await supabase.from('ordenes').delete().eq('id', id);
       if (error) { toast.error(error.message); return; }
@@ -179,6 +189,46 @@ export default function Admin() {
   function getUserName(userId: string) {
     const u = getUserInfo(userId);
     return u ? `${u.nombre_completo} (DNI: ${u.dni})` : userId;
+  }
+  function getOrderFiles(ordenId: string) {
+    return ordenArchivos.filter((a: any) => a.orden_id === ordenId);
+  }
+
+  // Download all files for an order as a zip named after the user
+  async function handleDownloadAllFiles(orden: any) {
+    const files = getOrderFiles(orden.id);
+    const userName = getUserInfo(orden.user_id)?.nombre_completo || 'usuario';
+    const safeName = userName.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-zA-Z0-9 _-]/g, '').replace(/\s+/g, '_');
+
+    // If there are files in orden_archivos, use them; otherwise fall back to legacy single file
+    if (files.length > 0) {
+      if (files.length === 1) {
+        // Single file: download directly
+        return handleDownloadFile(files[0].archivo_url, files[0].archivo_nombre);
+      }
+      toast.info('Generando archivo comprimido...');
+      const zip = new JSZip();
+      for (const f of files) {
+        try {
+          const { data, error } = await supabase.storage.from('print-files').download(f.archivo_url);
+          if (error || !data) { toast.error(`Error descargando ${f.archivo_nombre}`); continue; }
+          zip.file(f.archivo_nombre, data);
+        } catch (err: any) {
+          toast.error(`Error: ${err.message}`);
+        }
+      }
+      const blob = await zip.generateAsync({ type: 'blob' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${safeName}_pedido.zip`;
+      a.click();
+      URL.revokeObjectURL(url);
+      toast.success('Archivos descargados');
+    } else if (orden.archivo_url) {
+      // Legacy: single file stored on the order itself
+      return handleDownloadFile(orden.archivo_url, orden.archivo_nombre);
+    }
   }
   function getUserUso(userId: string) {
     const uso = becaUsos.find((u: any) => u.user_id === userId);
@@ -565,52 +615,62 @@ export default function Admin() {
               </CardHeader>
               <CardContent>
                 <div className="space-y-3">
-                  {visibleOrdenes.slice(0, 50).map(o => (
-                    <div key={o.id} className="flex items-center justify-between p-3 rounded-lg border">
-                      <div className="flex-1 min-w-0">
-                        <p className="font-medium text-sm">{o.archivo_nombre}</p>
-                        <p className="text-xs text-muted-foreground">
-                          {getUserName(o.user_id)} · {o.cantidad_paginas} carillas · {o.cantidad_hojas} hojas · ${Number(o.monto_final).toLocaleString('es-AR')}
-                          {o.color && ' · Color'}{o.anillado && ' · Anillado'}{o.usar_beca && ' · 🎓'}
-                          {o.doble_faz ? ' · 2F' : ' · 1F'}
-                        </p>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <Button variant="outline" size="sm" className="gap-1" onClick={() => handleDownloadFile(o.archivo_url, o.archivo_nombre)}>
-                          <Download className="h-3.5 w-3.5" /> PDF
-                        </Button>
-                        <Select value={o.estado_produccion || 'para_hacer'} onValueChange={(v) => updateEstadoProduccion(o.id, v)}>
-                          <SelectTrigger className="w-36"><SelectValue /></SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="para_hacer">Para hacer</SelectItem>
-                            <SelectItem value="hecho">Hecho</SelectItem>
-                            <SelectItem value="retirado">Retirado</SelectItem>
-                          </SelectContent>
-                        </Select>
-                        <AlertDialog>
-                          <AlertDialogTrigger asChild>
-                            <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive">
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
-                          </AlertDialogTrigger>
-                          <AlertDialogContent>
-                            <AlertDialogHeader>
-                              <AlertDialogTitle>¿Eliminar esta orden?</AlertDialogTitle>
-                              <AlertDialogDescription>
-                                Se eliminará la orden "{o.archivo_nombre}" y todos sus datos asociados. Esta acción no se puede deshacer.
-                              </AlertDialogDescription>
-                            </AlertDialogHeader>
-                            <AlertDialogFooter>
-                              <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                              <AlertDialogAction onClick={() => deleteOrden(o.id, o.archivo_url)} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
-                                Eliminar
-                              </AlertDialogAction>
-                            </AlertDialogFooter>
-                          </AlertDialogContent>
-                        </AlertDialog>
+                  {visibleOrdenes.slice(0, 50).map(o => {
+                    const oFiles = getOrderFiles(o.id);
+                    const fileCount = oFiles.length || 1;
+                    const fileNames = oFiles.length > 0 ? oFiles.map((f: any) => f.archivo_nombre).join(', ') : o.archivo_nombre;
+                    return (
+                    <div key={o.id} className="p-3 rounded-lg border space-y-2">
+                      <div className="flex items-center justify-between">
+                        <div className="flex-1 min-w-0">
+                          <p className="font-medium text-sm">{getUserName(o.user_id)}</p>
+                          <p className="text-xs text-muted-foreground">
+                            {fileCount} archivo{fileCount > 1 ? 's' : ''} · {o.cantidad_paginas} carillas · {o.cantidad_hojas} hojas · ${Number(o.monto_final).toLocaleString('es-AR')}
+                            {o.color && ' · Color'}{o.anillado && ' · Anillado'}{o.usar_beca && ' · 🎓'}
+                            {o.doble_faz ? ' · 2F' : ' · 1F'}
+                          </p>
+                          <p className="text-xs text-muted-foreground truncate mt-0.5" title={fileNames}>
+                            📄 {fileNames}
+                          </p>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Button variant="outline" size="sm" className="gap-1" onClick={() => handleDownloadAllFiles(o)}>
+                            <Download className="h-3.5 w-3.5" /> {fileCount > 1 ? 'ZIP' : 'Archivo'}
+                          </Button>
+                          <Select value={o.estado_produccion || 'para_hacer'} onValueChange={(v) => updateEstadoProduccion(o.id, v)}>
+                            <SelectTrigger className="w-36"><SelectValue /></SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="para_hacer">Para hacer</SelectItem>
+                              <SelectItem value="hecho">Hecho</SelectItem>
+                              <SelectItem value="retirado">Retirado</SelectItem>
+                            </SelectContent>
+                          </Select>
+                          <AlertDialog>
+                            <AlertDialogTrigger asChild>
+                              <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive">
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </AlertDialogTrigger>
+                            <AlertDialogContent>
+                              <AlertDialogHeader>
+                                <AlertDialogTitle>¿Eliminar esta orden?</AlertDialogTitle>
+                                <AlertDialogDescription>
+                                  Se eliminará la orden de {getUserName(o.user_id)} ({fileCount} archivos) y todos sus datos asociados. Esta acción no se puede deshacer.
+                                </AlertDialogDescription>
+                              </AlertDialogHeader>
+                              <AlertDialogFooter>
+                                <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                                <AlertDialogAction onClick={() => deleteOrden(o.id, o.archivo_url)} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+                                  Eliminar
+                                </AlertDialogAction>
+                              </AlertDialogFooter>
+                            </AlertDialogContent>
+                          </AlertDialog>
+                        </div>
                       </div>
                     </div>
-                  ))}
+                    );
+                  })}
                   {visibleOrdenes.length === 0 && <p className="text-center text-muted-foreground py-8">No hay órdenes pagadas</p>}
                 </div>
               </CardContent>
@@ -642,7 +702,7 @@ export default function Admin() {
                         <th className="text-left py-2 px-2 font-medium text-muted-foreground">Usuario</th>
                         <th className="text-left py-2 px-2 font-medium text-muted-foreground">DNI</th>
                         <th className="text-left py-2 px-2 font-medium text-muted-foreground">Carrera</th>
-                        <th className="text-left py-2 px-2 font-medium text-muted-foreground">Archivo</th>
+                        <th className="text-left py-2 px-2 font-medium text-muted-foreground">Archivos</th>
                         <th className="text-right py-2 px-2 font-medium text-muted-foreground">Carillas</th>
                         <th className="text-right py-2 px-2 font-medium text-muted-foreground">Hojas</th>
                         <th className="text-left py-2 px-2 font-medium text-muted-foreground">Opciones</th>
@@ -654,13 +714,16 @@ export default function Admin() {
                     <tbody>
                       {filteredOrdenes.map(o => {
                         const u = getUserInfo(o.user_id);
+                        const oFiles = getOrderFiles(o.id);
+                        const fileCount = oFiles.length || 1;
+                        const fileNames = oFiles.length > 0 ? oFiles.map((f: any) => f.archivo_nombre).join(', ') : o.archivo_nombre;
                         return (
                           <tr key={o.id} className="border-b hover:bg-muted/50">
                             <td className="py-2 px-2 whitespace-nowrap">{new Date(o.created_at).toLocaleString('es-AR')}</td>
                             <td className="py-2 px-2">{u?.nombre_completo || '—'}</td>
                             <td className="py-2 px-2">{u?.dni || '—'}</td>
                             <td className="py-2 px-2">{u?.carrera || '—'}</td>
-                            <td className="py-2 px-2 max-w-32 truncate">{o.archivo_nombre}</td>
+                            <td className="py-2 px-2 max-w-32 truncate" title={fileNames}>{fileCount > 1 ? `${fileCount} archivos` : fileNames}</td>
                             <td className="py-2 px-2 text-right">{o.cantidad_paginas}</td>
                             <td className="py-2 px-2 text-right">{o.cantidad_hojas}</td>
                             <td className="py-2 px-2">

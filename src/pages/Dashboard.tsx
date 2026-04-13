@@ -55,8 +55,11 @@ export default function Dashboard() {
   // Realtime: reload when config changes (e.g. admin updates beca limits)
   useEffect(() => {
     const channel = supabase
-      .channel('config-changes-dashboard')
+      .channel('dashboard-realtime')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'configuraciones' }, () => {
+        if (user) loadData();
+      })
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'ordenes' }, () => {
         if (user) loadData();
       })
       .subscribe();
