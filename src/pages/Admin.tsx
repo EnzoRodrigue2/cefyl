@@ -609,52 +609,62 @@ export default function Admin() {
               </CardHeader>
               <CardContent>
                 <div className="space-y-3">
-                  {visibleOrdenes.slice(0, 50).map(o => (
-                    <div key={o.id} className="flex items-center justify-between p-3 rounded-lg border">
-                      <div className="flex-1 min-w-0">
-                        <p className="font-medium text-sm">{o.archivo_nombre}</p>
-                        <p className="text-xs text-muted-foreground">
-                          {getUserName(o.user_id)} · {o.cantidad_paginas} carillas · {o.cantidad_hojas} hojas · ${Number(o.monto_final).toLocaleString('es-AR')}
-                          {o.color && ' · Color'}{o.anillado && ' · Anillado'}{o.usar_beca && ' · 🎓'}
-                          {o.doble_faz ? ' · 2F' : ' · 1F'}
-                        </p>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <Button variant="outline" size="sm" className="gap-1" onClick={() => handleDownloadFile(o.archivo_url, o.archivo_nombre)}>
-                          <Download className="h-3.5 w-3.5" /> PDF
-                        </Button>
-                        <Select value={o.estado_produccion || 'para_hacer'} onValueChange={(v) => updateEstadoProduccion(o.id, v)}>
-                          <SelectTrigger className="w-36"><SelectValue /></SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="para_hacer">Para hacer</SelectItem>
-                            <SelectItem value="hecho">Hecho</SelectItem>
-                            <SelectItem value="retirado">Retirado</SelectItem>
-                          </SelectContent>
-                        </Select>
-                        <AlertDialog>
-                          <AlertDialogTrigger asChild>
-                            <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive">
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
-                          </AlertDialogTrigger>
-                          <AlertDialogContent>
-                            <AlertDialogHeader>
-                              <AlertDialogTitle>¿Eliminar esta orden?</AlertDialogTitle>
-                              <AlertDialogDescription>
-                                Se eliminará la orden "{o.archivo_nombre}" y todos sus datos asociados. Esta acción no se puede deshacer.
-                              </AlertDialogDescription>
-                            </AlertDialogHeader>
-                            <AlertDialogFooter>
-                              <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                              <AlertDialogAction onClick={() => deleteOrden(o.id, o.archivo_url)} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
-                                Eliminar
-                              </AlertDialogAction>
-                            </AlertDialogFooter>
-                          </AlertDialogContent>
-                        </AlertDialog>
+                  {visibleOrdenes.slice(0, 50).map(o => {
+                    const oFiles = getOrderFiles(o.id);
+                    const fileCount = oFiles.length || 1;
+                    const fileNames = oFiles.length > 0 ? oFiles.map((f: any) => f.archivo_nombre).join(', ') : o.archivo_nombre;
+                    return (
+                    <div key={o.id} className="p-3 rounded-lg border space-y-2">
+                      <div className="flex items-center justify-between">
+                        <div className="flex-1 min-w-0">
+                          <p className="font-medium text-sm">{getUserName(o.user_id)}</p>
+                          <p className="text-xs text-muted-foreground">
+                            {fileCount} archivo{fileCount > 1 ? 's' : ''} · {o.cantidad_paginas} carillas · {o.cantidad_hojas} hojas · ${Number(o.monto_final).toLocaleString('es-AR')}
+                            {o.color && ' · Color'}{o.anillado && ' · Anillado'}{o.usar_beca && ' · 🎓'}
+                            {o.doble_faz ? ' · 2F' : ' · 1F'}
+                          </p>
+                          <p className="text-xs text-muted-foreground truncate mt-0.5" title={fileNames}>
+                            📄 {fileNames}
+                          </p>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Button variant="outline" size="sm" className="gap-1" onClick={() => handleDownloadAllFiles(o)}>
+                            <Download className="h-3.5 w-3.5" /> {fileCount > 1 ? 'ZIP' : 'Archivo'}
+                          </Button>
+                          <Select value={o.estado_produccion || 'para_hacer'} onValueChange={(v) => updateEstadoProduccion(o.id, v)}>
+                            <SelectTrigger className="w-36"><SelectValue /></SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="para_hacer">Para hacer</SelectItem>
+                              <SelectItem value="hecho">Hecho</SelectItem>
+                              <SelectItem value="retirado">Retirado</SelectItem>
+                            </SelectContent>
+                          </Select>
+                          <AlertDialog>
+                            <AlertDialogTrigger asChild>
+                              <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive">
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </AlertDialogTrigger>
+                            <AlertDialogContent>
+                              <AlertDialogHeader>
+                                <AlertDialogTitle>¿Eliminar esta orden?</AlertDialogTitle>
+                                <AlertDialogDescription>
+                                  Se eliminará la orden de {getUserName(o.user_id)} ({fileCount} archivos) y todos sus datos asociados. Esta acción no se puede deshacer.
+                                </AlertDialogDescription>
+                              </AlertDialogHeader>
+                              <AlertDialogFooter>
+                                <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                                <AlertDialogAction onClick={() => deleteOrden(o.id, o.archivo_url)} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+                                  Eliminar
+                                </AlertDialogAction>
+                              </AlertDialogFooter>
+                            </AlertDialogContent>
+                          </AlertDialog>
+                        </div>
                       </div>
                     </div>
-                  ))}
+                    );
+                  })}
                   {visibleOrdenes.length === 0 && <p className="text-center text-muted-foreground py-8">No hay órdenes pagadas</p>}
                 </div>
               </CardContent>
