@@ -211,11 +211,11 @@ export default function Dashboard() {
             ) : (
               <div className="space-y-3">
                 {ordenes.map(o => (
-                  <div key={o.id} className="flex items-center justify-between p-3 rounded-lg border bg-card hover:shadow-sm transition-shadow">
-                    <div className="flex items-center gap-3">
-                      <FileText className="h-5 w-5 text-muted-foreground" />
-                      <div>
-                        <p className="font-medium text-sm">{o.archivo_nombre}</p>
+                  <div key={o.id} className="p-3 rounded-lg border bg-card hover:shadow-sm transition-shadow space-y-2">
+                    <div className="flex items-start gap-3">
+                      <FileText className="h-5 w-5 text-muted-foreground shrink-0 mt-0.5" />
+                      <div className="min-w-0 flex-1">
+                        <p className="font-medium text-sm truncate">{o.archivo_nombre}</p>
                         <p className="text-xs text-muted-foreground">
                           {o.cantidad_paginas} carillas · {o.cantidad_hojas} hojas · ${Number(o.monto_final).toLocaleString('es-AR')}
                           {o.color && ' · Color'}
@@ -225,9 +225,11 @@ export default function Dashboard() {
                         </p>
                       </div>
                     </div>
-                    <Badge className={ESTADO_USUARIO_COLORS[o.estado_produccion] || 'bg-muted text-muted-foreground'}>
-                      {ESTADO_USUARIO_LABELS[o.estado_produccion] || o.estado_produccion}
-                    </Badge>
+                    <div className="flex justify-end">
+                      <Badge className={ESTADO_USUARIO_COLORS[o.estado_produccion] || 'bg-muted text-muted-foreground'}>
+                        {ESTADO_USUARIO_LABELS[o.estado_produccion] || o.estado_produccion}
+                      </Badge>
+                    </div>
                   </div>
                 ))}
               </div>
