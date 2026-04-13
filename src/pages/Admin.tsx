@@ -138,13 +138,19 @@ export default function Admin() {
 
   async function deleteOrden(id: string, archivoUrl: string) {
     try {
+      // Get all files for this order
+      const oFiles = getOrderFiles(id);
+      const fileUrls = oFiles.map((f: any) => f.archivo_url);
+      if (archivoUrl) fileUrls.push(archivoUrl); // legacy single file
+
       await Promise.all([
+        supabase.from('orden_archivos').delete().eq('orden_id', id),
         supabase.from('turnos').delete().eq('orden_id', id),
         supabase.from('pagos').delete().eq('orden_id', id),
         supabase.from('movimientos_financieros').delete().eq('orden_id', id),
       ]);
-      if (archivoUrl) {
-        await supabase.storage.from('print-files').remove([archivoUrl]);
+      if (fileUrls.length > 0) {
+        await supabase.storage.from('print-files').remove(fileUrls.filter(Boolean));
       }
       const { error } = await supabase.from('ordenes').delete().eq('id', id);
       if (error) { toast.error(error.message); return; }
