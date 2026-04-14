@@ -132,13 +132,17 @@ export default function Auth() {
                   <Input id="reg-fecha" type="date" value={regFechaNac} onChange={e => setRegFechaNac(e.target.value)} required />
                 </div>
                 <div className="space-y-2">
-                  <Label>Carrera</Label>
-                  <Select value={regCarrera} onValueChange={setRegCarrera}>
-                    <SelectTrigger><SelectValue placeholder="Seleccioná tu carrera" /></SelectTrigger>
-                    <SelectContent>
-                      {CARRERAS.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
+                  <Label htmlFor="reg-carrera">Carrera</Label>
+                  <select
+                    id="reg-carrera"
+                    value={regCarrera}
+                    onChange={e => setRegCarrera(e.target.value)}
+                    required
+                    className="flex h-10 w-full items-center rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    <option value="" disabled>Seleccioná tu carrera</option>
+                    {CARRERAS.map(c => <option key={c} value={c}>{c}</option>)}
+                  </select>
                 </div>
                 <Button type="submit" className="w-full" disabled={loading}>{loading ? 'Registrando...' : 'Crear cuenta'}</Button>
               </form>
