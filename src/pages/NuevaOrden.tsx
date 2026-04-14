@@ -165,7 +165,7 @@ export default function NuevaOrden() {
         cantidad_paginas: totalCarillas,
         doble_faz: dobleFaz,
         color,
-        anillado,
+        anillado: files.some(f => f.anillado),
         usar_beca: usarBecaGlobal,
         comentarios,
         cantidad_hojas: totalHojas,
@@ -329,14 +329,14 @@ export default function NuevaOrden() {
                 <Switch checked={color} onCheckedChange={setColor} />
               </div>
             </div>
-            <div className="flex items-center justify-between p-3 rounded-lg border">
-              <div>
+            <div className="rounded-lg border p-3">
+              <div className="flex items-center gap-2 mb-1">
                 <Label>Anillado</Label>
-                <p className="text-xs text-muted-foreground">
-                  {totalHojas > 0 && anillado ? `$${getAnilladoPrice(totalHojas).toLocaleString('es-AR')} por archivo` : 'Precio según cantidad de hojas'}
-                </p>
+                <span className="text-xs text-muted-foreground">(se selecciona por archivo, no está cubierto por beca)</span>
               </div>
-              <Switch checked={anillado} onCheckedChange={setAnillado} />
+              <p className="text-xs text-muted-foreground">
+                Activá el anillado en cada archivo desde la lista de arriba
+              </p>
             </div>
 
             <div className="space-y-2">
