@@ -200,7 +200,7 @@ export default function NuevaOrden() {
       }
 
       // 3. Payment flow
-      if (totalFinal > 0) {
+      if (Math.round(totalFinal) > 0) {
         toast.info('Redirigiendo a Mercado Pago...');
         const { data: mpData, error: mpError } = await supabase.functions.invoke('create-mp-preference', {
           body: {
