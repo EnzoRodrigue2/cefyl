@@ -244,7 +244,7 @@ export default function NuevaOrden() {
   };
 
   return (
-    <div className="min-h-screen bg-background p-6">
+    <div className="min-h-screen bg-background p-4 sm:p-6">
       <div className="max-w-2xl mx-auto animate-fade-in">
         <Button variant="ghost" className="mb-4 gap-2" onClick={() => navigate('/dashboard')}>
           <ArrowLeft className="h-4 w-4" /> Volver
@@ -315,7 +315,7 @@ export default function NuevaOrden() {
             )}
 
             {/* Options */}
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
               <div className="flex items-center justify-between p-3 rounded-lg border">
                 <Label>Simple faz</Label>
                 <Switch checked={simpleFaz} onCheckedChange={setSimpleFaz} />
@@ -343,10 +343,10 @@ export default function NuevaOrden() {
             {/* Price summary */}
             {files.length > 0 && (
               <div className="rounded-lg bg-muted p-4 space-y-2">
-                <div className="flex justify-between text-sm">
-                  <span>Carillas totales: {totalCarillas} · Hojas: {totalHojas} · {files.length} archivo{files.length > 1 ? 's' : ''}</span>
-                  <span>{dobleFaz ? 'Doble faz' : 'Simple faz'} · ${(dobleFaz ? precioDoble : precioSimple)}/hoja{color ? ` + $${precioColor}/color` : ''}</span>
-                </div>
+                <div className="text-sm space-y-1 sm:space-y-0 sm:flex sm:justify-between">
+                   <span>Carillas: {totalCarillas} · Hojas: {totalHojas} · {files.length} archivo{files.length > 1 ? 's' : ''}</span>
+                   <span>{dobleFaz ? 'Doble faz' : 'Simple faz'} · ${(dobleFaz ? precioDoble : precioSimple)}/hoja{color ? ` + $${precioColor}/color` : ''}</span>
+                 </div>
                 <div className="flex justify-between text-sm">
                   <span>Subtotal</span>
                   <span>${totalBase.toLocaleString('es-AR')}</span>

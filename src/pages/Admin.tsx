@@ -555,14 +555,14 @@ export default function Admin() {
 
   return (
     <div className="min-h-screen bg-background">
-      <header className="border-b bg-card px-6 py-4 flex items-center gap-4">
+      <header className="border-b bg-card px-4 sm:px-6 py-3 sm:py-4 flex items-center gap-2 sm:gap-4">
         <Button variant="ghost" size="icon" onClick={() => navigate('/dashboard')}><ArrowLeft className="h-4 w-4" /></Button>
-        <h1 className="text-xl font-bold">Panel Admin — IMPRESIONES CEFyL</h1>
+        <h1 className="text-base sm:text-xl font-bold truncate">Panel Admin — CEFyL</h1>
       </header>
 
-      <main className="max-w-6xl mx-auto p-6 space-y-6 animate-fade-in">
+      <main className="max-w-6xl mx-auto p-4 sm:p-6 space-y-4 sm:space-y-6 animate-fade-in">
         {/* Stats */}
-        <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">
           <Card><CardHeader className="pb-2"><p className="text-sm text-muted-foreground flex items-center gap-1"><FileText className="h-3.5 w-3.5" />Órdenes hoy (pagadas)</p><p className="text-2xl font-bold">{stats.ordenesHoy}</p></CardHeader></Card>
           <Card><CardHeader className="pb-2"><p className="text-sm text-muted-foreground flex items-center gap-1"><DollarSign className="h-3.5 w-3.5" />Ingresos hoy</p><p className="text-2xl font-bold">${stats.ingresosHoy.toLocaleString('es-AR')}</p></CardHeader></Card>
           <Card><CardHeader className="pb-2"><p className="text-sm text-muted-foreground flex items-center gap-1"><GraduationCap className="h-3.5 w-3.5" />Becas activas</p><p className="text-2xl font-bold">{stats.becasActivas}</p></CardHeader></Card>
@@ -613,12 +613,12 @@ export default function Admin() {
         </Card>
 
         <Tabs defaultValue="ordenes">
-          <TabsList>
-            <TabsTrigger value="ordenes" className="gap-1"><FileText className="h-3.5 w-3.5" />Órdenes</TabsTrigger>
-            <TabsTrigger value="historial" className="gap-1"><History className="h-3.5 w-3.5" />Historial</TabsTrigger>
-            <TabsTrigger value="becas" className="gap-1"><GraduationCap className="h-3.5 w-3.5" />Becas</TabsTrigger>
-            <TabsTrigger value="usuarios" className="gap-1"><Users className="h-3.5 w-3.5" />Usuarios</TabsTrigger>
-            <TabsTrigger value="config" className="gap-1"><Settings className="h-3.5 w-3.5" />Precios y Config</TabsTrigger>
+          <TabsList className="w-full overflow-x-auto flex justify-start">
+            <TabsTrigger value="ordenes" className="gap-1 text-xs sm:text-sm"><FileText className="h-3.5 w-3.5 hidden sm:inline" />Órdenes</TabsTrigger>
+            <TabsTrigger value="historial" className="gap-1 text-xs sm:text-sm"><History className="h-3.5 w-3.5 hidden sm:inline" />Historial</TabsTrigger>
+            <TabsTrigger value="becas" className="gap-1 text-xs sm:text-sm"><GraduationCap className="h-3.5 w-3.5 hidden sm:inline" />Becas</TabsTrigger>
+            <TabsTrigger value="usuarios" className="gap-1 text-xs sm:text-sm"><Users className="h-3.5 w-3.5 hidden sm:inline" />Usuarios</TabsTrigger>
+            <TabsTrigger value="config" className="gap-1 text-xs sm:text-sm"><Settings className="h-3.5 w-3.5 hidden sm:inline" />Config</TabsTrigger>
           </TabsList>
 
           {/* Ordenes tab - only paid orders */}
@@ -650,12 +650,12 @@ export default function Admin() {
                             📄 {fileNames}
                           </p>
                         </div>
-                        <div className="flex items-center gap-2">
+                        <div className="flex flex-wrap items-center gap-2">
                           <Button variant="outline" size="sm" className="gap-1" onClick={() => handleDownloadAllFiles(o)}>
-                            <Download className="h-3.5 w-3.5" /> {fileCount > 1 ? 'ZIP' : 'Archivo'}
+                            <Download className="h-3.5 w-3.5" /> <span className="hidden sm:inline">{fileCount > 1 ? 'ZIP' : 'Archivo'}</span>
                           </Button>
                           <Select value={o.estado_produccion || 'para_hacer'} onValueChange={(v) => updateEstadoProduccion(o.id, v)}>
-                            <SelectTrigger className="w-36"><SelectValue /></SelectTrigger>
+                            <SelectTrigger className="w-28 sm:w-36"><SelectValue /></SelectTrigger>
                             <SelectContent>
                               <SelectItem value="para_hacer">Para hacer</SelectItem>
                               <SelectItem value="hecho">Hecho</SelectItem>
