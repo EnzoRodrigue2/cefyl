@@ -13,7 +13,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
-import { Upload, ArrowLeft, FileText, X, AlertTriangle, GraduationCap, Image, BookOpen } from 'lucide-react';
+import { Upload, ArrowLeft, FileText, X, AlertTriangle, GraduationCap, Image, BookOpen, Palette } from 'lucide-react';
 
 interface FileEntry {
   file: File;
