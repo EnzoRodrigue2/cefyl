@@ -13,7 +13,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
-import { Upload, ArrowLeft, FileText, X, AlertTriangle, GraduationCap, Image } from 'lucide-react';
+import { Upload, ArrowLeft, FileText, X, AlertTriangle, GraduationCap, Image, BookOpen } from 'lucide-react';
 
 interface FileEntry {
   file: File;
@@ -298,11 +298,17 @@ export default function NuevaOrden() {
                       <div className="min-w-0">
                         <p className="font-medium text-sm truncate">{f.file.name}</p>
                         <p className="text-xs text-muted-foreground">
-                          {formatSize(f.file.size)} · ~{f.estimatedPages} carillas · {totals[i]?.hojas} hojas · ${totals[i]?.final.toLocaleString('es-AR')}
+                          {formatSize(f.file.size)} · ~{f.estimatedPages} carillas · {totals[i]?.hojas} hojas
+                          {f.anillado && ` · Anillado $${totals[i]?.costoAnillado.toLocaleString('es-AR')}`}
+                          {' · $'}{totals[i]?.final.toLocaleString('es-AR')}
                         </p>
                       </div>
                     </div>
                     <div className="flex items-center gap-2 shrink-0">
+                      <div className="flex items-center gap-1.5" title="Anillar este archivo">
+                        <Checkbox checked={f.anillado} onCheckedChange={() => toggleAnilladoFile(i)} />
+                        <BookOpen className="h-3.5 w-3.5 text-muted-foreground" />
+                      </div>
                       {beca && (
                         <div className="flex items-center gap-1.5" title="Usar beca en este archivo">
                           <Checkbox checked={f.usarBeca} onCheckedChange={() => toggleBecaFile(i)} />
