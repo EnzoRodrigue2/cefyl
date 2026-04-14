@@ -19,6 +19,7 @@ interface FileEntry {
   file: File;
   estimatedPages: number;
   usarBeca: boolean;
+  anillado: boolean;
 }
 
 export default function NuevaOrden() {
