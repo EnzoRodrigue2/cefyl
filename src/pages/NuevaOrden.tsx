@@ -124,9 +124,10 @@ export default function NuevaOrden() {
     const carillas = f.estimatedPages;
     const hojas = dobleFaz ? Math.ceil(carillas / 2) : carillas;
     const precioPorHoja = dobleFaz ? precioDoble : precioSimple;
-    let base = hojas * precioPorHoja;
-    if (color) base += hojas * precioColor;
-    if (anillado) base += getAnilladoPrice(hojas);
+    let costoImpresion = hojas * precioPorHoja;
+    if (color) costoImpresion += hojas * precioColor;
+    const costoAnillado = f.anillado ? getAnilladoPrice(hojas) : 0;
+    const base = costoImpresion + costoAnillado;
 
     let carillasConBeca = 0;
     let descuento = 0;
@@ -134,11 +135,12 @@ export default function NuevaOrden() {
       const carillasDisponibles = Math.max(0, limiteBeca - becaUso);
       carillasConBeca = Math.min(carillas, carillasDisponibles);
       const descPct = beca.tipo === '100' ? 100 : beca.tipo === '50' ? 50 : 0;
-      const precioPorCarilla = base / carillas;
+      // Beca solo cubre impresión (carillas), NO anillado
+      const precioPorCarilla = costoImpresion / carillas;
       descuento = carillasConBeca * precioPorCarilla * (descPct / 100);
     }
 
-    return { carillas, hojas, base, descuento, carillasConBeca, final: base - descuento };
+    return { carillas, hojas, base, costoAnillado, descuento, carillasConBeca, final: base - descuento };
   }
 
   const totals = files.map(calcFilePrice);
