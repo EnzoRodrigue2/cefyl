@@ -153,19 +153,19 @@ export default function Dashboard() {
 
   return (
     <div className="min-h-screen bg-background">
-      <header className="border-b bg-card px-6 py-4 flex items-center justify-between">
+      <header className="border-b bg-card px-4 sm:px-6 py-3 sm:py-4 flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-2">
           <div className="p-2 rounded-lg bg-primary"><Printer className="h-5 w-5 text-primary-foreground" /></div>
-          <span className="text-xl font-bold">IMPRESIONES CEFyL</span>
+          <span className="text-lg sm:text-xl font-bold truncate">IMPRESIONES CEFyL</span>
         </div>
-        <div className="flex items-center gap-3">
-          {isAdmin && <Button variant="outline" size="sm" onClick={() => navigate('/admin')}>Panel Admin</Button>}
-          <span className="text-sm text-muted-foreground">{profile?.nombre_completo}</span>
+        <div className="flex items-center gap-2 sm:gap-3">
+          {isAdmin && <Button variant="outline" size="sm" onClick={() => navigate('/admin')}>Admin</Button>}
+          <span className="text-sm text-muted-foreground hidden sm:inline">{profile?.nombre_completo}</span>
           <Button variant="ghost" size="icon" onClick={signOut}><LogOut className="h-4 w-4" /></Button>
         </div>
       </header>
 
-      <main className="max-w-5xl mx-auto p-6 space-y-6 animate-fade-in">
+      <main className="max-w-5xl mx-auto p-4 sm:p-6 space-y-4 sm:space-y-6 animate-fade-in">
         {/* Confirmation banner after payment */}
         {showConfirmation && (
           <div className="rounded-lg border border-primary/30 bg-primary/10 p-4 flex items-start gap-3 relative">
