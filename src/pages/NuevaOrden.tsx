@@ -28,8 +28,7 @@ export default function NuevaOrden() {
   const navigate = useNavigate();
   const [files, setFiles] = useState<FileEntry[]>([]);
   const [simpleFaz, setSimpleFaz] = useState(false);
-  const [color, setColor] = useState(false);
-  // anillado is now per-file
+  // color and anillado are now per-file
   const [comentarios, setComentarios] = useState('');
   const [loading, setLoading] = useState(false);
   const [config, setConfig] = useState<Record<string, number>>({});
@@ -101,7 +100,7 @@ export default function NuevaOrden() {
         pageCount = 1;
       }
       
-      newFiles.push({ file: f, estimatedPages: pageCount, usarBeca: !!beca, anillado: false });
+      newFiles.push({ file: f, estimatedPages: pageCount, usarBeca: !!beca, anillado: false, color: false });
     }
     if (newFiles.length > 0) setFiles(prev => [...prev, ...newFiles]);
     e.target.value = '';
@@ -110,6 +109,7 @@ export default function NuevaOrden() {
   const removeFile = (index: number) => setFiles(prev => prev.filter((_, i) => i !== index));
   const toggleBecaFile = (index: number) => setFiles(prev => prev.map((f, i) => i === index ? { ...f, usarBeca: !f.usarBeca } : f));
   const toggleAnilladoFile = (index: number) => setFiles(prev => prev.map((f, i) => i === index ? { ...f, anillado: !f.anillado } : f));
+  const toggleColorFile = (index: number) => setFiles(prev => prev.map((f, i) => i === index ? { ...f, color: !f.color } : f));
 
   const precioSimple = config.precio_simple_faz || 50;
   const precioDoble = config.precio_doble_faz || 40;
@@ -126,7 +126,7 @@ export default function NuevaOrden() {
     const hojas = dobleFaz ? Math.ceil(carillas / 2) : carillas;
     const precioPorHoja = dobleFaz ? precioDoble : precioSimple;
     let costoImpresion = hojas * precioPorHoja;
-    if (color) costoImpresion += hojas * precioColor;
+    if (f.color) costoImpresion += hojas * precioColor;
     const costoAnillado = f.anillado ? getAnilladoPrice(hojas) : 0;
     const base = costoImpresion + costoAnillado;
 
@@ -166,7 +166,7 @@ export default function NuevaOrden() {
         archivo_nombre: files.length === 1 ? files[0].file.name : `${files.length} archivos`,
         cantidad_paginas: totalCarillas,
         doble_faz: dobleFaz,
-        color,
+        color: files.some(f => f.color),
         anillado: files.some(f => f.anillado),
         usar_beca: usarBecaGlobal,
         comentarios,
