@@ -150,6 +150,7 @@ export default function NuevaOrden() {
   const totalHojas = totals.reduce((s, t) => s + t.hojas, 0);
   const totalCarillas = totals.reduce((s, t) => s + t.carillas, 0);
   const totalCarillasBeca = totals.reduce((s, t) => s + t.carillasConBeca, 0);
+  const totalAnillado = totals.reduce((s, t) => s + t.costoAnillado, 0);
   const carillasDisponibles = Math.max(0, limiteBeca - becaUso);
 
   const handleSubmit = async () => {
@@ -361,9 +362,15 @@ export default function NuevaOrden() {
                   <span>Subtotal</span>
                   <span>${totalBase.toLocaleString('es-AR')}</span>
                 </div>
+                {totalAnillado > 0 && (
+                  <div className="flex justify-between text-sm text-muted-foreground">
+                    <span>Incluye anillado ({files.filter(f => f.anillado).length} archivo{files.filter(f => f.anillado).length > 1 ? 's' : ''})</span>
+                    <span>${totalAnillado.toLocaleString('es-AR')}</span>
+                  </div>
+                )}
                 {totalDescuento > 0 && (
                   <div className="flex justify-between text-sm text-primary">
-                    <span>Descuento beca ({totalCarillasBeca} carillas cubiertas)</span>
+                    <span>Descuento beca ({totalCarillasBeca} carillas cubiertas, no incluye anillado)</span>
                     <span>-${totalDescuento.toLocaleString('es-AR')}</span>
                   </div>
                 )}
