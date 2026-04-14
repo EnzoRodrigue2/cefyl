@@ -1,66 +1,54 @@
 
 
-## Plan: Mejoras en flujo de pago y panel admin
+## Plan: Hacer el sitio completamente responsive
 
-### Resumen
+Hay varios problemas de responsive en las páginas principales. Aquí están los cambios necesarios:
 
-Se implementarán 4 cambios: (1) el webhook de MercadoPago ya existe y funciona, solo hay que asegurar que el admin solo vea órdenes pagadas; (2) agregar campo `estado_produccion` para seguimiento interno; (3) búsqueda por DNI con descuento manual de carillas.
+### Problemas identificados
 
----
+1. **Dashboard (header):** El header usa `flex items-center justify-between` sin wrap, lo que causa overflow en móvil cuando hay botón de admin + nombre + logout.
 
-### 1. Filtrar órdenes no pagadas del panel admin
+2. **Admin (header):** Similar al dashboard, título largo "Panel Admin — IMPRESIONES CEFyL" se corta en móvil.
 
-**Archivo: `src/pages/Admin.tsx`**
-- En la tab "Órdenes", filtrar para mostrar solo órdenes con `estado` distinto de `borrador`, `pendiente_pago` y `cancelada` (es decir, solo `pagado`, `en_proceso`, `finalizada`, `lista_retirar`, `retirada`).
-- En la tab "Historial", aplicar el mismo filtro base (mostrar solo órdenes que fueron pagadas en algún momento).
-- Actualizar las stats para contar solo órdenes pagadas.
+3. **Admin (stats):** Grid de 4 columnas (`sm:grid-cols-4`) funciona pero las cards internas tienen texto largo que puede desbordar.
 
-### 2. Agregar campo `estado_produccion` a la tabla `ordenes`
+4. **Admin (tabs):** La `TabsList` con 5 tabs (Órdenes, Historial, Becas, Usuarios, Config) no tiene scroll horizontal en móvil, se desborda.
 
-**Migración SQL:**
-- Crear un nuevo enum `estado_produccion` con valores: `para_hacer`, `hecho`, `retirado`.
-- Agregar columna `estado_produccion` a `ordenes` con default `para_hacer`.
+5. **Admin (órdenes):** Cada orden tiene botones de descarga + selector de estado + eliminar en una fila horizontal que se rompe en móvil.
 
-```sql
-CREATE TYPE public.estado_produccion AS ENUM ('para_hacer', 'hecho', 'retirado');
-ALTER TABLE public.ordenes ADD COLUMN estado_produccion estado_produccion NOT NULL DEFAULT 'para_hacer';
-```
+6. **Admin (historial):** Tabla con 11 columnas — tiene `overflow-x-auto` (bien), pero la tabla es muy ancha.
 
-**Archivo: `src/pages/Admin.tsx`**
-- Reemplazar el Select de estado actual por un Select de `estado_produccion` con las 3 opciones: "Para hacer", "Hecho", "Retirado".
-- Crear función `updateEstadoProduccion(id, valor)` que actualice este campo.
-- Mostrar el estado de producción como badge/columna tanto en Órdenes como en Historial.
-- Remover el selector de estado de pago (ya no tiene sentido cambiarlo manualmente).
+7. **Admin (becas):** Grid `grid-cols-2 sm:grid-cols-4` para info del usuario — OK pero podría mejorar.
 
-### 3. Búsqueda por DNI con descuento manual de carillas
+8. **NuevaOrden:** Grid de opciones `grid-cols-2` puede ser muy estrecho en pantallas pequeñas (320px).
 
-**Archivo: `src/pages/Admin.tsx`**
-- Agregar una sección/card en la tab "Becas" (o nueva tab) con:
-  - Input de búsqueda por DNI (validación numérica).
-  - Al buscar, mostrar nombre, carrera, beca activa, carillas disponibles.
-  - Input para cantidad de carillas a descontar.
-  - Botón "Descontar" con validaciones: usuario existente, saldo suficiente, no negativo.
-- Nota: ya existe un sistema de descuento manual por selector de alumno. Se mejorará agregando la búsqueda por DNI como método alternativo y más rápido.
+9. **NuevaOrden (resumen de precio):** Los `flex justify-between` con texto largo pueden desbordar.
 
-### 4. Trigger faltante (fix pendiente)
+### Cambios a realizar
 
-**Migración SQL:**
-```sql
-CREATE TRIGGER on_auth_user_created
-  AFTER INSERT ON auth.users
-  FOR EACH ROW
-  EXECUTE FUNCTION public.handle_new_user();
-```
+**`src/pages/Dashboard.tsx`:**
+- Header: hacer responsive con wrap, ocultar nombre en móvil o moverlo a segunda línea
+- Asegurar padding más pequeño en móvil (`p-4 sm:p-6`)
 
-Esto es necesario para que el registro de nuevos usuarios funcione correctamente.
+**`src/pages/Admin.tsx`:**
+- Header: truncar título en móvil, usar texto más corto
+- TabsList: agregar `overflow-x-auto` y `flex-wrap` o scroll horizontal
+- Órdenes: apilar botones de acción verticalmente en móvil
+- Historial: ya tiene `overflow-x-auto` (OK)
+- Becas: ajustar grid y selector de alumnos
+- Stats: reducir a 2 columnas en móvil (`grid-cols-2 sm:grid-cols-4`)
 
----
+**`src/pages/NuevaOrden.tsx`:**
+- Opciones: `grid-cols-1 sm:grid-cols-2` en pantallas muy pequeñas
+- Padding responsive (`p-4 sm:p-6`)
+- Resumen de precios: permitir wrap en textos largos
 
-### Archivos a modificar
-- `src/pages/Admin.tsx` — filtros, nuevo selector de producción, búsqueda por DNI
-- 1 migración SQL — nuevo enum, nueva columna, trigger faltante
+**`src/pages/Auth.tsx`:**
+- Ya es bastante responsive, solo ajustar padding mínimo
 
-### No se necesitan cambios en
-- `supabase/functions/mp-webhook/index.ts` — ya actualiza estado a `pagado` cuando MP confirma
-- `supabase/functions/create-mp-preference/index.ts` — ya crea órdenes en `pendiente_pago`
+### Resumen técnico
+- Todos los cambios son CSS/Tailwind — sin cambios de lógica
+- Se usan breakpoints `sm:` (640px) como punto de corte principal
+- Se agrega scroll horizontal a tabs del admin
+- Se apilan elementos verticalmente en móvil donde sea necesario
 
