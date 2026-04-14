@@ -28,7 +28,7 @@ export default function NuevaOrden() {
   const [files, setFiles] = useState<FileEntry[]>([]);
   const [simpleFaz, setSimpleFaz] = useState(false);
   const [color, setColor] = useState(false);
-  const [anillado, setAnillado] = useState(false);
+  // anillado is now per-file
   const [comentarios, setComentarios] = useState('');
   const [loading, setLoading] = useState(false);
   const [config, setConfig] = useState<Record<string, number>>({});
@@ -100,7 +100,7 @@ export default function NuevaOrden() {
         pageCount = 1;
       }
       
-      newFiles.push({ file: f, estimatedPages: pageCount, usarBeca: !!beca });
+      newFiles.push({ file: f, estimatedPages: pageCount, usarBeca: !!beca, anillado: false });
     }
     if (newFiles.length > 0) setFiles(prev => [...prev, ...newFiles]);
     e.target.value = '';
@@ -108,6 +108,7 @@ export default function NuevaOrden() {
 
   const removeFile = (index: number) => setFiles(prev => prev.filter((_, i) => i !== index));
   const toggleBecaFile = (index: number) => setFiles(prev => prev.map((f, i) => i === index ? { ...f, usarBeca: !f.usarBeca } : f));
+  const toggleAnilladoFile = (index: number) => setFiles(prev => prev.map((f, i) => i === index ? { ...f, anillado: !f.anillado } : f));
 
   const precioSimple = config.precio_simple_faz || 50;
   const precioDoble = config.precio_doble_faz || 40;
