@@ -20,6 +20,7 @@ interface FileEntry {
   estimatedPages: number;
   usarBeca: boolean;
   anillado: boolean;
+  color: boolean;
 }
 
 export default function NuevaOrden() {
