@@ -307,6 +307,10 @@ export default function NuevaOrden() {
                       </div>
                     </div>
                     <div className="flex items-center gap-2 shrink-0">
+                      <div className="flex items-center gap-1.5" title="Imprimir a color">
+                        <Checkbox checked={f.color} onCheckedChange={() => toggleColorFile(i)} />
+                        <Palette className="h-3.5 w-3.5 text-muted-foreground" />
+                      </div>
                       <div className="flex items-center gap-1.5" title="Anillar este archivo">
                         <Checkbox checked={f.anillado} onCheckedChange={() => toggleAnilladoFile(i)} />
                         <BookOpen className="h-3.5 w-3.5 text-muted-foreground" />
@@ -332,12 +336,16 @@ export default function NuevaOrden() {
                 <Label>Simple faz</Label>
                 <Switch checked={simpleFaz} onCheckedChange={setSimpleFaz} />
               </div>
-              <div className="flex items-center justify-between p-3 rounded-lg border">
-                <Label>Color</Label>
-                <Switch checked={color} onCheckedChange={setColor} />
+              <div className="rounded-lg border p-3">
+                <div className="flex items-center gap-2">
+                  <Palette className="h-4 w-4 text-muted-foreground" />
+                  <Label>Color / Anillado</Label>
+                </div>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Se seleccionan por archivo desde la lista de arriba
+                </p>
               </div>
             </div>
-            <div className="rounded-lg border p-3">
               <div className="flex items-center gap-2 mb-1">
                 <Label>Anillado</Label>
                 <span className="text-xs text-muted-foreground">(se selecciona por archivo, no está cubierto por beca)</span>
@@ -357,7 +365,7 @@ export default function NuevaOrden() {
               <div className="rounded-lg bg-muted p-4 space-y-2">
                 <div className="text-sm space-y-1 sm:space-y-0 sm:flex sm:justify-between">
                    <span>Carillas: {totalCarillas} · Hojas: {totalHojas} · {files.length} archivo{files.length > 1 ? 's' : ''}</span>
-                   <span>{dobleFaz ? 'Doble faz' : 'Simple faz'} · ${(dobleFaz ? precioDoble : precioSimple)}/hoja{color ? ` + $${precioColor}/color` : ''}</span>
+                   <span>{dobleFaz ? 'Doble faz' : 'Simple faz'} · ${(dobleFaz ? precioDoble : precioSimple)}/hoja</span>
                  </div>
                 <div className="flex justify-between text-sm">
                   <span>Subtotal</span>
