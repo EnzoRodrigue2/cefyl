@@ -301,6 +301,7 @@ export default function NuevaOrden() {
                         <p className="font-medium text-sm truncate">{f.file.name}</p>
                         <p className="text-xs text-muted-foreground">
                           {formatSize(f.file.size)} · ~{f.estimatedPages} carillas · {totals[i]?.hojas} hojas
+                          {f.color && ' · Color'}
                           {f.anillado && ` · Anillado $${totals[i]?.costoAnillado.toLocaleString('es-AR')}`}
                           {' · $'}{totals[i]?.final.toLocaleString('es-AR')}
                         </p>
