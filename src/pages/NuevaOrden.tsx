@@ -13,12 +13,13 @@ import { Textarea } from '@/components/ui/textarea';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
-import { Upload, ArrowLeft, FileText, X, AlertTriangle, GraduationCap, Image } from 'lucide-react';
+import { Upload, ArrowLeft, FileText, X, AlertTriangle, GraduationCap, Image, BookOpen } from 'lucide-react';
 
 interface FileEntry {
   file: File;
   estimatedPages: number;
   usarBeca: boolean;
+  anillado: boolean;
 }
 
 export default function NuevaOrden() {
@@ -27,7 +28,7 @@ export default function NuevaOrden() {
   const [files, setFiles] = useState<FileEntry[]>([]);
   const [simpleFaz, setSimpleFaz] = useState(false);
   const [color, setColor] = useState(false);
-  const [anillado, setAnillado] = useState(false);
+  // anillado is now per-file
   const [comentarios, setComentarios] = useState('');
   const [loading, setLoading] = useState(false);
   const [config, setConfig] = useState<Record<string, number>>({});
@@ -99,7 +100,7 @@ export default function NuevaOrden() {
         pageCount = 1;
       }
       
-      newFiles.push({ file: f, estimatedPages: pageCount, usarBeca: !!beca });
+      newFiles.push({ file: f, estimatedPages: pageCount, usarBeca: !!beca, anillado: false });
     }
     if (newFiles.length > 0) setFiles(prev => [...prev, ...newFiles]);
     e.target.value = '';
@@ -107,6 +108,7 @@ export default function NuevaOrden() {
 
   const removeFile = (index: number) => setFiles(prev => prev.filter((_, i) => i !== index));
   const toggleBecaFile = (index: number) => setFiles(prev => prev.map((f, i) => i === index ? { ...f, usarBeca: !f.usarBeca } : f));
+  const toggleAnilladoFile = (index: number) => setFiles(prev => prev.map((f, i) => i === index ? { ...f, anillado: !f.anillado } : f));
 
   const precioSimple = config.precio_simple_faz || 50;
   const precioDoble = config.precio_doble_faz || 40;
@@ -122,9 +124,10 @@ export default function NuevaOrden() {
     const carillas = f.estimatedPages;
     const hojas = dobleFaz ? Math.ceil(carillas / 2) : carillas;
     const precioPorHoja = dobleFaz ? precioDoble : precioSimple;
-    let base = hojas * precioPorHoja;
-    if (color) base += hojas * precioColor;
-    if (anillado) base += getAnilladoPrice(hojas);
+    let costoImpresion = hojas * precioPorHoja;
+    if (color) costoImpresion += hojas * precioColor;
+    const costoAnillado = f.anillado ? getAnilladoPrice(hojas) : 0;
+    const base = costoImpresion + costoAnillado;
 
     let carillasConBeca = 0;
     let descuento = 0;
@@ -132,11 +135,12 @@ export default function NuevaOrden() {
       const carillasDisponibles = Math.max(0, limiteBeca - becaUso);
       carillasConBeca = Math.min(carillas, carillasDisponibles);
       const descPct = beca.tipo === '100' ? 100 : beca.tipo === '50' ? 50 : 0;
-      const precioPorCarilla = base / carillas;
+      // Beca solo cubre impresión (carillas), NO anillado
+      const precioPorCarilla = costoImpresion / carillas;
       descuento = carillasConBeca * precioPorCarilla * (descPct / 100);
     }
 
-    return { carillas, hojas, base, descuento, carillasConBeca, final: base - descuento };
+    return { carillas, hojas, base, costoAnillado, descuento, carillasConBeca, final: base - descuento };
   }
 
   const totals = files.map(calcFilePrice);
@@ -146,6 +150,7 @@ export default function NuevaOrden() {
   const totalHojas = totals.reduce((s, t) => s + t.hojas, 0);
   const totalCarillas = totals.reduce((s, t) => s + t.carillas, 0);
   const totalCarillasBeca = totals.reduce((s, t) => s + t.carillasConBeca, 0);
+  const totalAnillado = totals.reduce((s, t) => s + t.costoAnillado, 0);
   const carillasDisponibles = Math.max(0, limiteBeca - becaUso);
 
   const handleSubmit = async () => {
@@ -161,7 +166,7 @@ export default function NuevaOrden() {
         cantidad_paginas: totalCarillas,
         doble_faz: dobleFaz,
         color,
-        anillado,
+        anillado: files.some(f => f.anillado),
         usar_beca: usarBecaGlobal,
         comentarios,
         cantidad_hojas: totalHojas,
@@ -294,11 +299,17 @@ export default function NuevaOrden() {
                       <div className="min-w-0">
                         <p className="font-medium text-sm truncate">{f.file.name}</p>
                         <p className="text-xs text-muted-foreground">
-                          {formatSize(f.file.size)} · ~{f.estimatedPages} carillas · {totals[i]?.hojas} hojas · ${totals[i]?.final.toLocaleString('es-AR')}
+                          {formatSize(f.file.size)} · ~{f.estimatedPages} carillas · {totals[i]?.hojas} hojas
+                          {f.anillado && ` · Anillado $${totals[i]?.costoAnillado.toLocaleString('es-AR')}`}
+                          {' · $'}{totals[i]?.final.toLocaleString('es-AR')}
                         </p>
                       </div>
                     </div>
                     <div className="flex items-center gap-2 shrink-0">
+                      <div className="flex items-center gap-1.5" title="Anillar este archivo">
+                        <Checkbox checked={f.anillado} onCheckedChange={() => toggleAnilladoFile(i)} />
+                        <BookOpen className="h-3.5 w-3.5 text-muted-foreground" />
+                      </div>
                       {beca && (
                         <div className="flex items-center gap-1.5" title="Usar beca en este archivo">
                           <Checkbox checked={f.usarBeca} onCheckedChange={() => toggleBecaFile(i)} />
@@ -325,14 +336,14 @@ export default function NuevaOrden() {
                 <Switch checked={color} onCheckedChange={setColor} />
               </div>
             </div>
-            <div className="flex items-center justify-between p-3 rounded-lg border">
-              <div>
+            <div className="rounded-lg border p-3">
+              <div className="flex items-center gap-2 mb-1">
                 <Label>Anillado</Label>
-                <p className="text-xs text-muted-foreground">
-                  {totalHojas > 0 && anillado ? `$${getAnilladoPrice(totalHojas).toLocaleString('es-AR')} por archivo` : 'Precio según cantidad de hojas'}
-                </p>
+                <span className="text-xs text-muted-foreground">(se selecciona por archivo, no está cubierto por beca)</span>
               </div>
-              <Switch checked={anillado} onCheckedChange={setAnillado} />
+              <p className="text-xs text-muted-foreground">
+                Activá el anillado en cada archivo desde la lista de arriba
+              </p>
             </div>
 
             <div className="space-y-2">
@@ -351,9 +362,15 @@ export default function NuevaOrden() {
                   <span>Subtotal</span>
                   <span>${totalBase.toLocaleString('es-AR')}</span>
                 </div>
+                {totalAnillado > 0 && (
+                  <div className="flex justify-between text-sm text-muted-foreground">
+                    <span>Incluye anillado ({files.filter(f => f.anillado).length} archivo{files.filter(f => f.anillado).length > 1 ? 's' : ''})</span>
+                    <span>${totalAnillado.toLocaleString('es-AR')}</span>
+                  </div>
+                )}
                 {totalDescuento > 0 && (
                   <div className="flex justify-between text-sm text-primary">
-                    <span>Descuento beca ({totalCarillasBeca} carillas cubiertas)</span>
+                    <span>Descuento beca ({totalCarillasBeca} carillas cubiertas, no incluye anillado)</span>
                     <span>-${totalDescuento.toLocaleString('es-AR')}</span>
                   </div>
                 )}
