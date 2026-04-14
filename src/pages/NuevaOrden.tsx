@@ -346,14 +346,8 @@ export default function NuevaOrden() {
                 </p>
               </div>
             </div>
-              <div className="flex items-center gap-2 mb-1">
-                <Label>Anillado</Label>
-                <span className="text-xs text-muted-foreground">(se selecciona por archivo, no está cubierto por beca)</span>
-              </div>
-              <p className="text-xs text-muted-foreground">
-                Activá el anillado en cada archivo desde la lista de arriba
-              </p>
-            </div>
+
+
 
             <div className="space-y-2">
               <Label>Comentarios (opcional)</Label>
