@@ -13,13 +13,14 @@ import { Textarea } from '@/components/ui/textarea';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
-import { Upload, ArrowLeft, FileText, X, AlertTriangle, GraduationCap, Image, BookOpen } from 'lucide-react';
+import { Upload, ArrowLeft, FileText, X, AlertTriangle, GraduationCap, Image, BookOpen, Palette } from 'lucide-react';
 
 interface FileEntry {
   file: File;
   estimatedPages: number;
   usarBeca: boolean;
   anillado: boolean;
+  color: boolean;
 }
 
 export default function NuevaOrden() {
@@ -27,8 +28,7 @@ export default function NuevaOrden() {
   const navigate = useNavigate();
   const [files, setFiles] = useState<FileEntry[]>([]);
   const [simpleFaz, setSimpleFaz] = useState(false);
-  const [color, setColor] = useState(false);
-  // anillado is now per-file
+  // color and anillado are now per-file
   const [comentarios, setComentarios] = useState('');
   const [loading, setLoading] = useState(false);
   const [config, setConfig] = useState<Record<string, number>>({});
@@ -100,7 +100,7 @@ export default function NuevaOrden() {
         pageCount = 1;
       }
       
-      newFiles.push({ file: f, estimatedPages: pageCount, usarBeca: !!beca, anillado: false });
+      newFiles.push({ file: f, estimatedPages: pageCount, usarBeca: !!beca, anillado: false, color: false });
     }
     if (newFiles.length > 0) setFiles(prev => [...prev, ...newFiles]);
     e.target.value = '';
@@ -109,6 +109,7 @@ export default function NuevaOrden() {
   const removeFile = (index: number) => setFiles(prev => prev.filter((_, i) => i !== index));
   const toggleBecaFile = (index: number) => setFiles(prev => prev.map((f, i) => i === index ? { ...f, usarBeca: !f.usarBeca } : f));
   const toggleAnilladoFile = (index: number) => setFiles(prev => prev.map((f, i) => i === index ? { ...f, anillado: !f.anillado } : f));
+  const toggleColorFile = (index: number) => setFiles(prev => prev.map((f, i) => i === index ? { ...f, color: !f.color } : f));
 
   const precioSimple = config.precio_simple_faz || 50;
   const precioDoble = config.precio_doble_faz || 40;
@@ -125,7 +126,7 @@ export default function NuevaOrden() {
     const hojas = dobleFaz ? Math.ceil(carillas / 2) : carillas;
     const precioPorHoja = dobleFaz ? precioDoble : precioSimple;
     let costoImpresion = hojas * precioPorHoja;
-    if (color) costoImpresion += hojas * precioColor;
+    if (f.color) costoImpresion += hojas * precioColor;
     const costoAnillado = f.anillado ? getAnilladoPrice(hojas) : 0;
     const base = costoImpresion + costoAnillado;
 
@@ -165,7 +166,7 @@ export default function NuevaOrden() {
         archivo_nombre: files.length === 1 ? files[0].file.name : `${files.length} archivos`,
         cantidad_paginas: totalCarillas,
         doble_faz: dobleFaz,
-        color,
+        color: files.some(f => f.color),
         anillado: files.some(f => f.anillado),
         usar_beca: usarBecaGlobal,
         comentarios,
@@ -300,12 +301,17 @@ export default function NuevaOrden() {
                         <p className="font-medium text-sm truncate">{f.file.name}</p>
                         <p className="text-xs text-muted-foreground">
                           {formatSize(f.file.size)} · ~{f.estimatedPages} carillas · {totals[i]?.hojas} hojas
+                          {f.color && ' · Color'}
                           {f.anillado && ` · Anillado $${totals[i]?.costoAnillado.toLocaleString('es-AR')}`}
                           {' · $'}{totals[i]?.final.toLocaleString('es-AR')}
                         </p>
                       </div>
                     </div>
                     <div className="flex items-center gap-2 shrink-0">
+                      <div className="flex items-center gap-1.5" title="Imprimir a color">
+                        <Checkbox checked={f.color} onCheckedChange={() => toggleColorFile(i)} />
+                        <Palette className="h-3.5 w-3.5 text-muted-foreground" />
+                      </div>
                       <div className="flex items-center gap-1.5" title="Anillar este archivo">
                         <Checkbox checked={f.anillado} onCheckedChange={() => toggleAnilladoFile(i)} />
                         <BookOpen className="h-3.5 w-3.5 text-muted-foreground" />
@@ -331,20 +337,18 @@ export default function NuevaOrden() {
                 <Label>Simple faz</Label>
                 <Switch checked={simpleFaz} onCheckedChange={setSimpleFaz} />
               </div>
-              <div className="flex items-center justify-between p-3 rounded-lg border">
-                <Label>Color</Label>
-                <Switch checked={color} onCheckedChange={setColor} />
+              <div className="rounded-lg border p-3">
+                <div className="flex items-center gap-2">
+                  <Palette className="h-4 w-4 text-muted-foreground" />
+                  <Label>Color / Anillado</Label>
+                </div>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Se seleccionan por archivo desde la lista de arriba
+                </p>
               </div>
             </div>
-            <div className="rounded-lg border p-3">
-              <div className="flex items-center gap-2 mb-1">
-                <Label>Anillado</Label>
-                <span className="text-xs text-muted-foreground">(se selecciona por archivo, no está cubierto por beca)</span>
-              </div>
-              <p className="text-xs text-muted-foreground">
-                Activá el anillado en cada archivo desde la lista de arriba
-              </p>
-            </div>
+
+
 
             <div className="space-y-2">
               <Label>Comentarios (opcional)</Label>
@@ -356,7 +360,7 @@ export default function NuevaOrden() {
               <div className="rounded-lg bg-muted p-4 space-y-2">
                 <div className="text-sm space-y-1 sm:space-y-0 sm:flex sm:justify-between">
                    <span>Carillas: {totalCarillas} · Hojas: {totalHojas} · {files.length} archivo{files.length > 1 ? 's' : ''}</span>
-                   <span>{dobleFaz ? 'Doble faz' : 'Simple faz'} · ${(dobleFaz ? precioDoble : precioSimple)}/hoja{color ? ` + $${precioColor}/color` : ''}</span>
+                   <span>{dobleFaz ? 'Doble faz' : 'Simple faz'} · ${(dobleFaz ? precioDoble : precioSimple)}/hoja</span>
                  </div>
                 <div className="flex justify-between text-sm">
                   <span>Subtotal</span>
