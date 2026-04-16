@@ -509,6 +509,7 @@ export default function Admin() {
         'Monto Final': Number(o.monto_final),
         Estado: ESTADO_LABELS[o.estado] || o.estado,
         'Estado Producción': PRODUCCION_LABELS[o.estado_produccion] || o.estado_produccion || 'Para hacer',
+        Comentarios: o.comentarios || '',
       };
     });
     const ws = XLSX.utils.json_to_sheet(rows);
