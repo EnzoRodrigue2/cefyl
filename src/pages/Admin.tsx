@@ -509,6 +509,7 @@ export default function Admin() {
         'Monto Final': Number(o.monto_final),
         Estado: ESTADO_LABELS[o.estado] || o.estado,
         'Estado Producción': PRODUCCION_LABELS[o.estado_produccion] || o.estado_produccion || 'Para hacer',
+        Comentarios: o.comentarios || '',
       };
     });
     const ws = XLSX.utils.json_to_sheet(rows);
@@ -649,6 +650,9 @@ export default function Admin() {
                           <p className="text-xs text-muted-foreground truncate mt-0.5" title={fileNames}>
                             📄 {fileNames}
                           </p>
+                          {o.comentarios && (
+                            <p className="text-xs text-amber-600 mt-0.5">💬 {o.comentarios}</p>
+                          )}
                         </div>
                         <div className="flex flex-wrap items-center gap-2">
                           <Button variant="outline" size="sm" className="gap-1" onClick={() => handleDownloadAllFiles(o)}>
@@ -724,6 +728,7 @@ export default function Admin() {
                         <th className="text-right py-2 px-2 font-medium text-muted-foreground">Hojas</th>
                         <th className="text-left py-2 px-2 font-medium text-muted-foreground">Opciones</th>
                         <th className="text-right py-2 px-2 font-medium text-muted-foreground">Monto</th>
+                        <th className="text-left py-2 px-2 font-medium text-muted-foreground">Comentarios</th>
                         <th className="text-left py-2 px-2 font-medium text-muted-foreground">Producción</th>
                         <th className="text-left py-2 px-2 font-medium text-muted-foreground">Acciones</th>
                       </tr>
@@ -752,6 +757,7 @@ export default function Admin() {
                                 {o.usar_beca && <Badge variant="outline" className="text-xs">🎓</Badge>}
                               </div>
                             </td>
+                            <td className="py-2 px-2 max-w-40 truncate" title={o.comentarios || ''}>{o.comentarios || '—'}</td>
                             <td className="py-2 px-2 text-right font-medium">${Number(o.monto_final).toLocaleString('es-AR')}</td>
                             <td className="py-2 px-2">
                               <Select value={o.estado_produccion || 'para_hacer'} onValueChange={(v) => updateEstadoProduccion(o.id, v)}>
