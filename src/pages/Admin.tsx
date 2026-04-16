@@ -727,6 +727,7 @@ export default function Admin() {
                         <th className="text-right py-2 px-2 font-medium text-muted-foreground">Hojas</th>
                         <th className="text-left py-2 px-2 font-medium text-muted-foreground">Opciones</th>
                         <th className="text-right py-2 px-2 font-medium text-muted-foreground">Monto</th>
+                        <th className="text-left py-2 px-2 font-medium text-muted-foreground">Comentarios</th>
                         <th className="text-left py-2 px-2 font-medium text-muted-foreground">Producción</th>
                         <th className="text-left py-2 px-2 font-medium text-muted-foreground">Acciones</th>
                       </tr>
