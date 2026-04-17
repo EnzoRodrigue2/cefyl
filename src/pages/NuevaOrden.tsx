@@ -21,6 +21,7 @@ interface FileEntry {
   usarBeca: boolean;
   anillado: boolean;
   color: boolean;
+  tipoMaterial: 'carreras' | 'cbc';
 }
 
 export default function NuevaOrden() {
@@ -100,7 +101,7 @@ export default function NuevaOrden() {
         pageCount = 1;
       }
       
-      newFiles.push({ file: f, estimatedPages: pageCount, usarBeca: !!beca, anillado: false, color: false });
+      newFiles.push({ file: f, estimatedPages: pageCount, usarBeca: !!beca, anillado: false, color: false, tipoMaterial: 'carreras' });
     }
     if (newFiles.length > 0) setFiles(prev => [...prev, ...newFiles]);
     e.target.value = '';
@@ -110,6 +111,7 @@ export default function NuevaOrden() {
   const toggleBecaFile = (index: number) => setFiles(prev => prev.map((f, i) => i === index ? { ...f, usarBeca: !f.usarBeca } : f));
   const toggleAnilladoFile = (index: number) => setFiles(prev => prev.map((f, i) => i === index ? { ...f, anillado: !f.anillado } : f));
   const toggleColorFile = (index: number) => setFiles(prev => prev.map((f, i) => i === index ? { ...f, color: !f.color } : f));
+  const setTipoMaterialFile = (index: number, tipo: 'carreras' | 'cbc') => setFiles(prev => prev.map((f, i) => i === index ? { ...f, tipoMaterial: tipo } : f));
 
   const precioSimple = config.precio_simple_faz || 50;
   const precioDoble = config.precio_doble_faz || 40;
@@ -195,6 +197,7 @@ export default function NuevaOrden() {
           archivo_nombre: file.name,
           cantidad_paginas: estimatedPages,
           cantidad_hojas: hojas,
+          tipo_material: files[i].tipoMaterial,
         });
         if (archivoError) throw new Error(`Error registrando "${file.name}": ${archivoError.message}`);
       }
@@ -294,37 +297,67 @@ export default function NuevaOrden() {
               <div className="space-y-2">
                 <Label className="text-xs text-muted-foreground uppercase">Archivos ({files.length})</Label>
                 {files.map((f, i) => (
-                  <div key={i} className="flex items-center justify-between p-3 rounded-lg border bg-card">
-                    <div className="flex items-center gap-2 flex-1 min-w-0">
-                      {f.file.type.startsWith('image/') ? <Image className="h-5 w-5 text-primary shrink-0" /> : <FileText className="h-5 w-5 text-primary shrink-0" />}
-                      <div className="min-w-0">
-                        <p className="font-medium text-sm truncate">{f.file.name}</p>
-                        <p className="text-xs text-muted-foreground">
-                          {formatSize(f.file.size)} · ~{f.estimatedPages} carillas · {totals[i]?.hojas} hojas
-                          {f.color && ' · Color'}
-                          {f.anillado && ` · Anillado $${totals[i]?.costoAnillado.toLocaleString('es-AR')}`}
-                          {' · $'}{totals[i]?.final.toLocaleString('es-AR')}
-                        </p>
+                  <div key={i} className="p-3 rounded-lg border bg-card space-y-2">
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2 flex-1 min-w-0">
+                        {f.file.type.startsWith('image/') ? <Image className="h-5 w-5 text-primary shrink-0" /> : <FileText className="h-5 w-5 text-primary shrink-0" />}
+                        <div className="min-w-0">
+                          <p className="font-medium text-sm truncate">{f.file.name}</p>
+                          <p className="text-xs text-muted-foreground">
+                            {formatSize(f.file.size)} · ~{f.estimatedPages} carillas · {totals[i]?.hojas} hojas
+                            {f.color && ' · Color'}
+                            {f.anillado && ` · Anillado $${totals[i]?.costoAnillado.toLocaleString('es-AR')}`}
+                            {' · $'}{totals[i]?.final.toLocaleString('es-AR')}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <div className="flex items-center gap-1.5" title="Imprimir a color">
+                          <Checkbox checked={f.color} onCheckedChange={() => toggleColorFile(i)} />
+                          <Palette className="h-3.5 w-3.5 text-muted-foreground" />
+                        </div>
+                        <div className="flex items-center gap-1.5" title="Anillar este archivo">
+                          <Checkbox checked={f.anillado} onCheckedChange={() => toggleAnilladoFile(i)} />
+                          <BookOpen className="h-3.5 w-3.5 text-muted-foreground" />
+                        </div>
+                        {beca && (
+                          <div className="flex items-center gap-1.5" title="Usar beca en este archivo">
+                            <Checkbox checked={f.usarBeca} onCheckedChange={() => toggleBecaFile(i)} />
+                            <GraduationCap className="h-3.5 w-3.5 text-primary" />
+                          </div>
+                        )}
+                        <Button variant="ghost" size="icon" onClick={() => removeFile(i)} className="h-8 w-8">
+                          <X className="h-4 w-4" />
+                        </Button>
                       </div>
                     </div>
-                    <div className="flex items-center gap-2 shrink-0">
-                      <div className="flex items-center gap-1.5" title="Imprimir a color">
-                        <Checkbox checked={f.color} onCheckedChange={() => toggleColorFile(i)} />
-                        <Palette className="h-3.5 w-3.5 text-muted-foreground" />
+                    {/* Tipo material selector */}
+                    <div className="flex items-center gap-2 pl-7">
+                      <Label className="text-xs text-muted-foreground">Tipo:</Label>
+                      <div className="flex gap-1">
+                        <button
+                          type="button"
+                          onClick={() => setTipoMaterialFile(i, 'carreras')}
+                          className={`text-xs px-2.5 py-1 rounded-md border transition-colors ${
+                            f.tipoMaterial === 'carreras'
+                              ? 'bg-primary text-primary-foreground border-primary'
+                              : 'bg-background hover:bg-muted'
+                          }`}
+                        >
+                          📚 Carreras
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setTipoMaterialFile(i, 'cbc')}
+                          className={`text-xs px-2.5 py-1 rounded-md border transition-colors ${
+                            f.tipoMaterial === 'cbc'
+                              ? 'bg-primary text-primary-foreground border-primary'
+                              : 'bg-background hover:bg-muted'
+                          }`}
+                        >
+                          🎓 CBC
+                        </button>
                       </div>
-                      <div className="flex items-center gap-1.5" title="Anillar este archivo">
-                        <Checkbox checked={f.anillado} onCheckedChange={() => toggleAnilladoFile(i)} />
-                        <BookOpen className="h-3.5 w-3.5 text-muted-foreground" />
-                      </div>
-                      {beca && (
-                        <div className="flex items-center gap-1.5" title="Usar beca en este archivo">
-                          <Checkbox checked={f.usarBeca} onCheckedChange={() => toggleBecaFile(i)} />
-                          <GraduationCap className="h-3.5 w-3.5 text-primary" />
-                        </div>
-                      )}
-                      <Button variant="ghost" size="icon" onClick={() => removeFile(i)} className="h-8 w-8">
-                        <X className="h-4 w-4" />
-                      </Button>
                     </div>
                   </div>
                 ))}
