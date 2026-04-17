@@ -21,6 +21,7 @@ interface FileEntry {
   usarBeca: boolean;
   anillado: boolean;
   color: boolean;
+  tipoMaterial: 'carreras' | 'cbc';
 }
 
 export default function NuevaOrden() {
@@ -100,7 +101,7 @@ export default function NuevaOrden() {
         pageCount = 1;
       }
       
-      newFiles.push({ file: f, estimatedPages: pageCount, usarBeca: !!beca, anillado: false, color: false });
+      newFiles.push({ file: f, estimatedPages: pageCount, usarBeca: !!beca, anillado: false, color: false, tipoMaterial: 'carreras' });
     }
     if (newFiles.length > 0) setFiles(prev => [...prev, ...newFiles]);
     e.target.value = '';
@@ -110,6 +111,7 @@ export default function NuevaOrden() {
   const toggleBecaFile = (index: number) => setFiles(prev => prev.map((f, i) => i === index ? { ...f, usarBeca: !f.usarBeca } : f));
   const toggleAnilladoFile = (index: number) => setFiles(prev => prev.map((f, i) => i === index ? { ...f, anillado: !f.anillado } : f));
   const toggleColorFile = (index: number) => setFiles(prev => prev.map((f, i) => i === index ? { ...f, color: !f.color } : f));
+  const setTipoMaterialFile = (index: number, tipo: 'carreras' | 'cbc') => setFiles(prev => prev.map((f, i) => i === index ? { ...f, tipoMaterial: tipo } : f));
 
   const precioSimple = config.precio_simple_faz || 50;
   const precioDoble = config.precio_doble_faz || 40;
