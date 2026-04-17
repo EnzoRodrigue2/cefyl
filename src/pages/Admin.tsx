@@ -137,8 +137,29 @@ export default function Admin() {
 
   async function updateEstadoProduccion(id: string, estado: string) {
     const { error } = await supabase.from('ordenes').update({ estado_produccion: estado as any }).eq('id', id);
-    if (error) toast.error(error.message);
-    else { toast.success('Estado de producción actualizado'); loadAll(); }
+    if (error) { toast.error(error.message); return; }
+    toast.success('Estado de producción actualizado');
+
+    // Send pickup notification email when marked as "hecho"
+    if (estado === 'hecho') {
+      try {
+        const { data, error: mailErr } = await supabase.functions.invoke('send-pickup-notification', {
+          body: { orden_id: id },
+        });
+        if (mailErr) {
+          toast.warning('Estado actualizado, pero no se pudo enviar el email de aviso.');
+        } else if (data?.sent) {
+          toast.success('📧 Email de aviso enviado al usuario');
+        } else if (data?.skipped === 'already_sent') {
+          // silent
+        } else {
+          toast.warning('Estado actualizado. El email no se envió (configurá un dominio en Lovable Cloud → Emails para activarlo).');
+        }
+      } catch {
+        toast.warning('Estado actualizado, pero el envío de email falló.');
+      }
+    }
+    loadAll();
   }
 
   async function deleteOrden(id: string, archivoUrl: string) {
@@ -642,6 +663,7 @@ export default function Admin() {
                       <div className="flex items-center justify-between">
                         <div className="flex-1 min-w-0">
                           <p className="font-medium text-sm">{getUserName(o.user_id)}</p>
+                          <p className="text-xs text-muted-foreground">📅 {new Date(o.created_at).toLocaleString('es-AR')}</p>
                           <p className="text-xs text-muted-foreground">
                             {fileCount} archivo{fileCount > 1 ? 's' : ''} · {o.cantidad_paginas} carillas · {o.cantidad_hojas} hojas · ${Number(o.monto_final).toLocaleString('es-AR')}
                             {o.color && ' · Color'}{o.anillado && ' · Anillado'}{o.usar_beca && ' · 🎓'}
@@ -650,6 +672,15 @@ export default function Admin() {
                           <p className="text-xs text-muted-foreground truncate mt-0.5" title={fileNames}>
                             📄 {fileNames}
                           </p>
+                          {oFiles.length > 0 && (
+                            <div className="flex flex-wrap gap-1 mt-1">
+                              {oFiles.map((f: any) => (
+                                <Badge key={f.id} variant="outline" className="text-xs">
+                                  {f.tipo_material === 'cbc' ? '🎓 CBC' : '📚 Carreras'}: {f.archivo_nombre.length > 18 ? f.archivo_nombre.slice(0, 18) + '…' : f.archivo_nombre}
+                                </Badge>
+                              ))}
+                            </div>
+                          )}
                           {o.comentarios && (
                             <p className="text-xs text-amber-600 mt-0.5">💬 {o.comentarios}</p>
                           )}
