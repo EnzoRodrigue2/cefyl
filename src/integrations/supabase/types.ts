@@ -199,6 +199,7 @@ export type Database = {
           created_at: string | null
           id: string
           orden_id: string
+          tipo_material: Database["public"]["Enums"]["tipo_material"]
         }
         Insert: {
           archivo_nombre: string
@@ -208,6 +209,7 @@ export type Database = {
           created_at?: string | null
           id?: string
           orden_id: string
+          tipo_material?: Database["public"]["Enums"]["tipo_material"]
         }
         Update: {
           archivo_nombre?: string
@@ -217,6 +219,7 @@ export type Database = {
           created_at?: string | null
           id?: string
           orden_id?: string
+          tipo_material?: Database["public"]["Enums"]["tipo_material"]
         }
         Relationships: [
           {
@@ -240,12 +243,14 @@ export type Database = {
           created_at: string | null
           descuento_beca: number | null
           doble_faz: boolean | null
+          email_retiro_enviado: boolean
           estado: Database["public"]["Enums"]["orden_estado"]
           estado_produccion: Database["public"]["Enums"]["estado_produccion"]
           excedente: number | null
           id: string
           monto_final: number
           precio_base: number
+          retirada_at: string | null
           updated_at: string | null
           usar_beca: boolean | null
           user_id: string
@@ -261,12 +266,14 @@ export type Database = {
           created_at?: string | null
           descuento_beca?: number | null
           doble_faz?: boolean | null
+          email_retiro_enviado?: boolean
           estado?: Database["public"]["Enums"]["orden_estado"]
           estado_produccion?: Database["public"]["Enums"]["estado_produccion"]
           excedente?: number | null
           id?: string
           monto_final?: number
           precio_base?: number
+          retirada_at?: string | null
           updated_at?: string | null
           usar_beca?: boolean | null
           user_id: string
@@ -282,12 +289,14 @@ export type Database = {
           created_at?: string | null
           descuento_beca?: number | null
           doble_faz?: boolean | null
+          email_retiro_enviado?: boolean
           estado?: Database["public"]["Enums"]["orden_estado"]
           estado_produccion?: Database["public"]["Enums"]["estado_produccion"]
           excedente?: number | null
           id?: string
           monto_final?: number
           precio_base?: number
+          retirada_at?: string | null
           updated_at?: string | null
           usar_beca?: boolean | null
           user_id?: string
@@ -478,6 +487,7 @@ export type Database = {
         | "retirada"
         | "cancelada"
       pago_estado: "pendiente" | "aprobado" | "rechazado"
+      tipo_material: "carreras" | "cbc"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -620,6 +630,7 @@ export const Constants = {
         "cancelada",
       ],
       pago_estado: ["pendiente", "aprobado", "rechazado"],
+      tipo_material: ["carreras", "cbc"],
     },
   },
 } as const
