@@ -122,7 +122,7 @@ export default function Dashboard() {
   async function loadData() {
     const [profileRes, ordenesRes, becasRes, configRes] = await Promise.all([
       supabase.from('profiles').select('*').eq('user_id', user!.id).single(),
-      supabase.from('ordenes').select('*').eq('user_id', user!.id)
+      supabase.from('ordenes').select('*, orden_archivos(tipo_material, archivo_nombre)').eq('user_id', user!.id)
         .in('estado', ['pagado', 'en_proceso', 'finalizada', 'lista_retirar', 'retirada'])
         .order('created_at', { ascending: false }),
       supabase.from('becas').select('*').eq('user_id', user!.id).eq('estado', 'aprobada').maybeSingle(),
@@ -263,19 +263,33 @@ export default function Dashboard() {
               <p className="text-muted-foreground text-center py-8">No tenés órdenes todavía.</p>
             ) : (
               <div className="space-y-3">
-                {ordenes.map(o => (
+                {ordenes.map(o => {
+                  const tipos = Array.from(new Set((o.orden_archivos || []).map((a: any) => a.tipo_material).filter(Boolean)));
+                  return (
                   <div key={o.id} className="p-3 rounded-lg border bg-card hover:shadow-sm transition-shadow space-y-2">
                     <div className="flex items-start gap-3">
                       <FileText className="h-5 w-5 text-muted-foreground shrink-0 mt-0.5" />
                       <div className="min-w-0 flex-1">
                         <p className="font-medium text-sm truncate">{o.archivo_nombre}</p>
                         <p className="text-xs text-muted-foreground">
+                          📅 {new Date(o.created_at).toLocaleString('es-AR', { dateStyle: 'short', timeStyle: 'short' })}
+                        </p>
+                        <p className="text-xs text-muted-foreground mt-0.5">
                           {o.cantidad_paginas} carillas · {o.cantidad_hojas} hojas · ${Number(o.monto_final).toLocaleString('es-AR')}
                           {o.color && ' · Color'}
                           {!o.doble_faz && ' · Simple faz'}
                           {o.anillado && ' · Anillado'}
                           {o.usar_beca && ' · 🎓 Beca'}
                         </p>
+                        {tipos.length > 0 && (
+                          <div className="flex gap-1 mt-1.5 flex-wrap">
+                            {tipos.map((t: any) => (
+                              <Badge key={t} variant="outline" className="text-xs">
+                                {t === 'cbc' ? '🎓 CBC' : '📚 Carreras'}
+                              </Badge>
+                            ))}
+                          </div>
+                        )}
                       </div>
                     </div>
                     <div className="flex justify-end">
@@ -284,7 +298,8 @@ export default function Dashboard() {
                       </Badge>
                     </div>
                   </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </CardContent>
