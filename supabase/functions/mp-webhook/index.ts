@@ -73,12 +73,13 @@ Deno.serve(async (req) => {
         .update({ estado: "aprobado", transaccion_id: String(paymentId) })
         .in("orden_id", ordenIds);
 
-      // Update ordenes status to pagado
+      // Update ordenes status to pagado (also recover orders that were
+      // erroneously cancelled before the approved webhook arrived).
       await adminClient
         .from("ordenes")
         .update({ estado: "pagado" })
         .in("id", ordenIds)
-        .eq("estado", "pendiente_pago");
+        .in("estado", ["pendiente_pago", "cancelada"]);
 
       // Now update beca usage for orders that used beca
       const { data: ordenes } = await adminClient
