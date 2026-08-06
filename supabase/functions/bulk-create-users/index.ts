@@ -70,6 +70,73 @@ async function handleDeleteAll(adminClient: ReturnType<typeof createClient>) {
   return { success: true, deleted };
 }
 
+async function deleteUserCompletely(
+  adminClient: ReturnType<typeof createClient>,
+  userId: string,
+) {
+  // Collect orders to clean up their storage files
+  const { data: ordenes } = await adminClient
+    .from("ordenes")
+    .select("id, archivo_url")
+    .eq("user_id", userId);
+
+  const ordenIds = (ordenes || []).map((o: any) => o.id);
+  const paths: string[] = (ordenes || [])
+    .map((o: any) => o.archivo_url)
+    .filter((p: string) => !!p);
+
+  if (ordenIds.length > 0) {
+    const { data: archivos } = await adminClient
+      .from("orden_archivos")
+      .select("archivo_url")
+      .in("orden_id", ordenIds);
+    for (const a of archivos || []) {
+      if (a.archivo_url) paths.push(a.archivo_url);
+    }
+  }
+
+  if (paths.length > 0) {
+    await adminClient.storage.from("print-files").remove([...new Set(paths)]);
+  }
+
+  if (ordenIds.length > 0) {
+    await adminClient.from("orden_archivos").delete().in("orden_id", ordenIds);
+    await adminClient.from("movimientos_financieros").delete().in("orden_id", ordenIds);
+  }
+
+  for (const table of ["pagos", "turnos", "ordenes", "beca_uso_mensual", "becas", "profiles", "user_roles"]) {
+    await adminClient.from(table).delete().eq("user_id", userId);
+  }
+
+  const { error } = await adminClient.auth.admin.deleteUser(userId);
+  if (error) throw new Error(error.message);
+}
+
+async function handleDeleteWithBeca(adminClient: ReturnType<typeof createClient>) {
+  const { data: adminRoles } = await adminClient
+    .from("user_roles")
+    .select("user_id")
+    .eq("role", "admin");
+  const adminIds = new Set((adminRoles || []).map((r: any) => r.user_id));
+
+  const { data: becas } = await adminClient.from("becas").select("user_id");
+  const targets = [
+    ...new Set((becas || []).map((b: any) => b.user_id).filter((id: string) => !adminIds.has(id))),
+  ];
+
+  let deleted = 0;
+  const errors: string[] = [];
+  for (const userId of targets) {
+    try {
+      await deleteUserCompletely(adminClient, userId as string);
+      deleted++;
+    } catch (e) {
+      errors.push(`${userId}: ${(e as Error).message}`);
+    }
+  }
+  return { success: true, deleted, total: targets.length, errors };
+}
+
 async function upsertBeca(
   adminClient: ReturnType<typeof createClient>,
   userId: string,
@@ -129,6 +196,13 @@ Deno.serve(async (req) => {
   try {
     const adminClient = await verifyAdmin(req);
     const { users, action } = await req.json();
+
+    if (action === "delete_with_beca") {
+      const result = await handleDeleteWithBeca(adminClient);
+      return new Response(JSON.stringify(result), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
 
     if (action === "delete_all") {
       const result = await handleDeleteAll(adminClient);
