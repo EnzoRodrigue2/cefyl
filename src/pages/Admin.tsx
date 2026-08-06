@@ -71,6 +71,7 @@ export default function Admin() {
   const [fechaHasta, setFechaHasta] = useState('');
   const [uploading, setUploading] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [deletingBecados, setDeletingBecados] = useState(false);
 
   // Manual deduction state
   const [deductUserId, setDeductUserId] = useState('');
@@ -498,6 +499,29 @@ export default function Admin() {
     e.target.value = '';
   }
 
+  // Delete all non-admin users with a beca assigned
+  async function handleDeleteBecados() {
+    setDeletingBecados(true);
+    try {
+      const { data: result, error } = await supabase.functions.invoke('bulk-create-users', {
+        body: { action: 'delete_with_beca' },
+      });
+      if (error) {
+        toast.error('Error: ' + error.message);
+      } else if (result) {
+        toast.success(`🗑️ ${result.deleted} usuarios con beca eliminados`);
+        if (result.errors?.length) {
+          console.warn('Errores al eliminar:', result.errors);
+          toast.warning(`${result.errors.length} no se pudieron eliminar. Revisá la consola (F12).`);
+        }
+        loadAll();
+      }
+    } catch (err: any) {
+      toast.error('Error: ' + err.message);
+    }
+    setDeletingBecados(false);
+  }
+
   // Delete all non-admin users and their data
   async function handleDeleteAll() {
     setDeleting(true);
@@ -636,6 +660,28 @@ export default function Admin() {
                     <AlertDialogCancel>Cancelar</AlertDialogCancel>
                     <AlertDialogAction onClick={handleDeleteAll} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
                       {deleting ? 'Eliminando...' : 'Sí, borrar todo'}
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
+
+              <AlertDialog>
+                <AlertDialogTrigger asChild>
+                  <Button variant="destructive" className="gap-2" disabled={deletingBecados}>
+                    <Trash2 className="h-4 w-4" /> Eliminar usuarios con beca
+                  </Button>
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>⚠️ ¿Eliminar usuarios con beca?</AlertDialogTitle>
+                    <AlertDialogDescription>
+                      Esto eliminará por completo las cuentas de todos los usuarios que tengan una beca asignada (excepto administradores), junto con sus pedidos, archivos, pagos, turnos y datos asociados. Esta acción no se puede deshacer.
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                    <AlertDialogAction onClick={handleDeleteBecados} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+                      {deletingBecados ? 'Eliminando...' : 'Sí, eliminar'}
                     </AlertDialogAction>
                   </AlertDialogFooter>
                 </AlertDialogContent>
