@@ -288,6 +288,25 @@ export default function NuevaOrden() {
           <ArrowLeft className="h-4 w-4" /> Volver
         </Button>
 
+        {/* Daily limit banner */}
+        <div className={`mb-4 rounded-lg border p-4 flex items-start gap-3 ${carillasDiariasDisponibles === 0 ? 'border-destructive/40 bg-destructive/10' : 'border-border bg-muted/40'}`}>
+          <FileText className={`h-5 w-5 mt-0.5 shrink-0 ${carillasDiariasDisponibles === 0 ? 'text-destructive' : 'text-primary'}`} />
+          <div>
+            <p className="font-bold text-sm">Límite diario de impresión</p>
+            <p className="text-xs text-muted-foreground mt-1">
+              Podés enviar hasta {limiteDiario} carillas por día entre todos tus pedidos.
+            </p>
+            <p className="text-xs font-medium mt-1">
+              Hoy te quedan <span className={carillasDiariasDisponibles === 0 ? 'text-destructive' : 'text-primary'}>{carillasDiariasDisponibles} carillas</span> disponibles (usaste {usoDiario} de {limiteDiario}).
+            </p>
+            {excedeLimiteDiario && (
+              <p className="text-xs text-destructive font-medium mt-1">
+                ⚠️ Este pedido tiene {totalCarillas} carillas y supera tu límite de hoy.
+              </p>
+            )}
+          </div>
+        </div>
+
         {/* Banner "Usalo a conciencia" */}
         {beca && (
           <div className="mb-4 rounded-lg border border-primary/30 bg-primary/5 p-4 flex items-start gap-3">
