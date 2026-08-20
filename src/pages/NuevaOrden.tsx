@@ -466,8 +466,8 @@ export default function NuevaOrden() {
               </div>
             )}
 
-            <Button onClick={handleSubmit} disabled={files.length === 0 || loading} className="w-full">
-              {loading ? 'Procesando...' : totalFinal > 0 ? `Pagar $${totalFinal.toLocaleString('es-AR')} con Mercado Pago` : 'Crear orden (cubierta por beca)'}
+            <Button onClick={handleSubmit} disabled={files.length === 0 || loading || excedeLimiteDiario} className="w-full">
+              {loading ? 'Procesando...' : excedeLimiteDiario ? `Superás el límite diario (${carillasDiariasDisponibles} carillas disponibles hoy)` : totalFinal > 0 ? `Pagar $${totalFinal.toLocaleString('es-AR')} con Mercado Pago` : 'Crear orden (cubierta por beca)'}
             </Button>
           </CardContent>
         </Card>
