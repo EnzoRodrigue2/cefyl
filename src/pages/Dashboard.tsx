@@ -46,6 +46,8 @@ export default function Dashboard() {
   const [becaActiva, setBecaActiva] = useState<any>(null);
   const [becaUso, setBecaUso] = useState(0); // carillas used
   const [limiteBeca, setLimiteBeca] = useState(500);
+  const [usoDiario, setUsoDiario] = useState(0);
+  const [limiteDiario, setLimiteDiario] = useState(1000);
 
   const clearPaymentParams = () => {
     const nextParams = new URLSearchParams(searchParams);
