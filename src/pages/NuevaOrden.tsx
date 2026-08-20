@@ -176,9 +176,17 @@ export default function NuevaOrden() {
   const totalCarillasBeca = totals.reduce((s, t) => s + t.carillasConBeca, 0);
   const totalAnillado = totals.reduce((s, t) => s + t.costoAnillado, 0);
   const carillasDisponibles = Math.max(0, limiteBeca - becaUso);
+  const carillasDiariasDisponibles = Math.max(0, limiteDiario - usoDiario);
+  const excedeLimiteDiario = totalCarillas > carillasDiariasDisponibles;
 
   const handleSubmit = async () => {
     if (files.length === 0 || !user) return;
+    // Daily limit check (re-validated against DB right before creating the order)
+    const usoActual = await loadUsoDiario();
+    if (totalCarillas > Math.max(0, limiteDiario - usoActual)) {
+      toast.error(`Superás el límite diario de ${limiteDiario} carillas. Hoy te quedan ${Math.max(0, limiteDiario - usoActual)} carillas disponibles.`);
+      return;
+    }
     setLoading(true);
     try {
       // 1. Create a single order with aggregated totals
