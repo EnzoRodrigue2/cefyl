@@ -148,9 +148,22 @@ export default function Dashboard() {
         .eq('user_id', user!.id).eq('mes', now.getMonth() + 1).eq('anio', now.getFullYear()).maybeSingle();
       setBecaUso(Number(usoRes.data?.monto_usado || 0));
     }
+
+    setLimiteDiario(Number(cfgMap.limite_diario_carillas || 1000));
+    const inicioDia = new Date();
+    inicioDia.setHours(0, 0, 0, 0);
+    const diarioRes = await supabase.from('ordenes')
+      .select('cantidad_paginas, estado')
+      .eq('user_id', user!.id)
+      .gte('created_at', inicioDia.toISOString());
+    setUsoDiario((diarioRes.data || [])
+      .filter((o: any) => o.estado !== 'cancelada')
+      .reduce((s: number, o: any) => s + Number(o.cantidad_paginas || 0), 0));
   }
 
   const carillasDisponibles = Math.max(0, limiteBeca - becaUso);
+  const carillasDiariasDisponibles = Math.max(0, limiteDiario - usoDiario);
+  const usoDiarioPct = limiteDiario > 0 ? Math.min((usoDiario / limiteDiario) * 100, 100) : 0;
   const usoPct = limiteBeca > 0 ? Math.min((becaUso / limiteBeca) * 100, 100) : 0;
 
   return (
