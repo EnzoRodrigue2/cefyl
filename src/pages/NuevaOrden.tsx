@@ -36,6 +36,8 @@ export default function NuevaOrden() {
   const [beca, setBeca] = useState<any>(null);
   const [becaUso, setBecaUso] = useState(0);
   const [limiteBeca, setLimiteBeca] = useState(500);
+  const [usoDiario, setUsoDiario] = useState(0);
+  const [limiteDiario, setLimiteDiario] = useState(1000);
 
   const dobleFaz = !simpleFaz;
 
@@ -56,13 +58,32 @@ export default function NuevaOrden() {
       : (cfgMap.limite_beca_50 || 200);
     setLimiteBeca(limite);
 
+    setLimiteDiario(cfgMap.limite_diario_carillas || 1000);
+
     if (becaRes.data) {
       const now = new Date();
       const usoRes = await supabase.from('beca_uso_mensual').select('monto_usado')
         .eq('user_id', user!.id).eq('mes', now.getMonth() + 1).eq('anio', now.getFullYear()).maybeSingle();
       setBecaUso(Number(usoRes.data?.monto_usado || 0));
     }
+
+    await loadUsoDiario();
   }
+
+  async function loadUsoDiario() {
+    const inicioDia = new Date();
+    inicioDia.setHours(0, 0, 0, 0);
+    const { data } = await supabase.from('ordenes')
+      .select('cantidad_paginas, estado')
+      .eq('user_id', user!.id)
+      .gte('created_at', inicioDia.toISOString());
+    const total = (data || [])
+      .filter((o: any) => o.estado !== 'cancelada')
+      .reduce((s: number, o: any) => s + Number(o.cantidad_paginas || 0), 0);
+    setUsoDiario(total);
+    return total;
+  }
+
 
   const allowedTypes = [
     'application/pdf',
@@ -155,9 +176,17 @@ export default function NuevaOrden() {
   const totalCarillasBeca = totals.reduce((s, t) => s + t.carillasConBeca, 0);
   const totalAnillado = totals.reduce((s, t) => s + t.costoAnillado, 0);
   const carillasDisponibles = Math.max(0, limiteBeca - becaUso);
+  const carillasDiariasDisponibles = Math.max(0, limiteDiario - usoDiario);
+  const excedeLimiteDiario = totalCarillas > carillasDiariasDisponibles;
 
   const handleSubmit = async () => {
     if (files.length === 0 || !user) return;
+    // Daily limit check (re-validated against DB right before creating the order)
+    const usoActual = await loadUsoDiario();
+    if (totalCarillas > Math.max(0, limiteDiario - usoActual)) {
+      toast.error(`Superás el límite diario de ${limiteDiario} carillas. Hoy te quedan ${Math.max(0, limiteDiario - usoActual)} carillas disponibles.`);
+      return;
+    }
     setLoading(true);
     try {
       // 1. Create a single order with aggregated totals
@@ -258,6 +287,25 @@ export default function NuevaOrden() {
         <Button variant="ghost" className="mb-4 gap-2" onClick={() => navigate('/dashboard')}>
           <ArrowLeft className="h-4 w-4" /> Volver
         </Button>
+
+        {/* Daily limit banner */}
+        <div className={`mb-4 rounded-lg border p-4 flex items-start gap-3 ${carillasDiariasDisponibles === 0 ? 'border-destructive/40 bg-destructive/10' : 'border-border bg-muted/40'}`}>
+          <FileText className={`h-5 w-5 mt-0.5 shrink-0 ${carillasDiariasDisponibles === 0 ? 'text-destructive' : 'text-primary'}`} />
+          <div>
+            <p className="font-bold text-sm">Límite diario de impresión</p>
+            <p className="text-xs text-muted-foreground mt-1">
+              Podés enviar hasta {limiteDiario} carillas por día entre todos tus pedidos.
+            </p>
+            <p className="text-xs font-medium mt-1">
+              Hoy te quedan <span className={carillasDiariasDisponibles === 0 ? 'text-destructive' : 'text-primary'}>{carillasDiariasDisponibles} carillas</span> disponibles (usaste {usoDiario} de {limiteDiario}).
+            </p>
+            {excedeLimiteDiario && (
+              <p className="text-xs text-destructive font-medium mt-1">
+                ⚠️ Este pedido tiene {totalCarillas} carillas y supera tu límite de hoy.
+              </p>
+            )}
+          </div>
+        </div>
 
         {/* Banner "Usalo a conciencia" */}
         {beca && (
@@ -418,8 +466,8 @@ export default function NuevaOrden() {
               </div>
             )}
 
-            <Button onClick={handleSubmit} disabled={files.length === 0 || loading} className="w-full">
-              {loading ? 'Procesando...' : totalFinal > 0 ? `Pagar $${totalFinal.toLocaleString('es-AR')} con Mercado Pago` : 'Crear orden (cubierta por beca)'}
+            <Button onClick={handleSubmit} disabled={files.length === 0 || loading || excedeLimiteDiario} className="w-full">
+              {loading ? 'Procesando...' : excedeLimiteDiario ? `Superás el límite diario (${carillasDiariasDisponibles} carillas disponibles hoy)` : totalFinal > 0 ? `Pagar $${totalFinal.toLocaleString('es-AR')} con Mercado Pago` : 'Crear orden (cubierta por beca)'}
             </Button>
           </CardContent>
         </Card>

@@ -46,6 +46,8 @@ export default function Dashboard() {
   const [becaActiva, setBecaActiva] = useState<any>(null);
   const [becaUso, setBecaUso] = useState(0); // carillas used
   const [limiteBeca, setLimiteBeca] = useState(500);
+  const [usoDiario, setUsoDiario] = useState(0);
+  const [limiteDiario, setLimiteDiario] = useState(1000);
 
   const clearPaymentParams = () => {
     const nextParams = new URLSearchParams(searchParams);
@@ -146,9 +148,22 @@ export default function Dashboard() {
         .eq('user_id', user!.id).eq('mes', now.getMonth() + 1).eq('anio', now.getFullYear()).maybeSingle();
       setBecaUso(Number(usoRes.data?.monto_usado || 0));
     }
+
+    setLimiteDiario(Number(cfgMap.limite_diario_carillas || 1000));
+    const inicioDia = new Date();
+    inicioDia.setHours(0, 0, 0, 0);
+    const diarioRes = await supabase.from('ordenes')
+      .select('cantidad_paginas, estado')
+      .eq('user_id', user!.id)
+      .gte('created_at', inicioDia.toISOString());
+    setUsoDiario((diarioRes.data || [])
+      .filter((o: any) => o.estado !== 'cancelada')
+      .reduce((s: number, o: any) => s + Number(o.cantidad_paginas || 0), 0));
   }
 
   const carillasDisponibles = Math.max(0, limiteBeca - becaUso);
+  const carillasDiariasDisponibles = Math.max(0, limiteDiario - usoDiario);
+  const usoDiarioPct = limiteDiario > 0 ? Math.min((usoDiario / limiteDiario) * 100, 100) : 0;
   const usoPct = limiteBeca > 0 ? Math.min((becaUso / limiteBeca) * 100, 100) : 0;
 
   return (
@@ -212,6 +227,23 @@ export default function Dashboard() {
               </CardContent>
             </Card>
           )}
+        </div>
+
+        {/* Daily limit banner */}
+        <div className={`rounded-lg border p-4 flex items-start gap-3 ${carillasDiariasDisponibles === 0 ? 'border-destructive/40 bg-destructive/10' : 'border-border bg-muted/40'}`}>
+          <FileText className={`h-5 w-5 mt-0.5 shrink-0 ${carillasDiariasDisponibles === 0 ? 'text-destructive' : 'text-primary'}`} />
+          <div className="flex-1 min-w-0">
+            <p className="font-bold text-sm">Carillas disponibles hoy</p>
+            <p className="text-xs text-muted-foreground mt-1">
+              Podés enviar hasta {limiteDiario} carillas por día sumando todos tus pedidos.
+            </p>
+            <div className="mt-2 space-y-1">
+              <Progress value={usoDiarioPct} className="h-2" />
+              <p className="text-xs font-medium">
+                Te quedan <span className={carillasDiariasDisponibles === 0 ? 'text-destructive' : 'text-primary'}>{carillasDiariasDisponibles} carillas</span> hoy (usaste {usoDiario} de {limiteDiario}).
+              </p>
+            </div>
+          </div>
         </div>
 
         {/* "Usalo a conciencia" banner for beca users */}
