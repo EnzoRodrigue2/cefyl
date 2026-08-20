@@ -195,7 +195,32 @@ Deno.serve(async (req) => {
 
   try {
     const adminClient = await verifyAdmin(req);
-    const { users, action } = await req.json();
+    const { users, action, dni } = await req.json();
+
+    if (action === "delete_by_dni") {
+      const targetDni = normalizeDni(dni);
+      if (!targetDni) {
+        return new Response(JSON.stringify({ error: "DNI requerido" }), {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      const { data: profile } = await adminClient
+        .from("profiles")
+        .select("user_id")
+        .eq("dni", targetDni)
+        .maybeSingle();
+      if (!profile) {
+        return new Response(JSON.stringify({ error: "Usuario no encontrado" }), {
+          status: 404,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      await deleteUserCompletely(adminClient, profile.user_id as string);
+      return new Response(JSON.stringify({ success: true, deleted: 1 }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
 
     if (action === "delete_with_beca") {
       const result = await handleDeleteWithBeca(adminClient);
@@ -203,6 +228,7 @@ Deno.serve(async (req) => {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
+
 
     if (action === "delete_all") {
       const result = await handleDeleteAll(adminClient);
