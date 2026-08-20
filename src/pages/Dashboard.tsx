@@ -229,6 +229,23 @@ export default function Dashboard() {
           )}
         </div>
 
+        {/* Daily limit banner */}
+        <div className={`rounded-lg border p-4 flex items-start gap-3 ${carillasDiariasDisponibles === 0 ? 'border-destructive/40 bg-destructive/10' : 'border-border bg-muted/40'}`}>
+          <FileText className={`h-5 w-5 mt-0.5 shrink-0 ${carillasDiariasDisponibles === 0 ? 'text-destructive' : 'text-primary'}`} />
+          <div className="flex-1 min-w-0">
+            <p className="font-bold text-sm">Carillas disponibles hoy</p>
+            <p className="text-xs text-muted-foreground mt-1">
+              Podés enviar hasta {limiteDiario} carillas por día sumando todos tus pedidos.
+            </p>
+            <div className="mt-2 space-y-1">
+              <Progress value={usoDiarioPct} className="h-2" />
+              <p className="text-xs font-medium">
+                Te quedan <span className={carillasDiariasDisponibles === 0 ? 'text-destructive' : 'text-primary'}>{carillasDiariasDisponibles} carillas</span> hoy (usaste {usoDiario} de {limiteDiario}).
+              </p>
+            </div>
+          </div>
+        </div>
+
         {/* "Usalo a conciencia" banner for beca users */}
         {becaActiva && (
           <div className="rounded-lg border border-primary/30 bg-primary/5 p-4 flex items-start gap-3">
