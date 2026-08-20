@@ -58,13 +58,32 @@ export default function NuevaOrden() {
       : (cfgMap.limite_beca_50 || 200);
     setLimiteBeca(limite);
 
+    setLimiteDiario(cfgMap.limite_diario_carillas || 1000);
+
     if (becaRes.data) {
       const now = new Date();
       const usoRes = await supabase.from('beca_uso_mensual').select('monto_usado')
         .eq('user_id', user!.id).eq('mes', now.getMonth() + 1).eq('anio', now.getFullYear()).maybeSingle();
       setBecaUso(Number(usoRes.data?.monto_usado || 0));
     }
+
+    await loadUsoDiario();
   }
+
+  async function loadUsoDiario() {
+    const inicioDia = new Date();
+    inicioDia.setHours(0, 0, 0, 0);
+    const { data } = await supabase.from('ordenes')
+      .select('cantidad_paginas, estado')
+      .eq('user_id', user!.id)
+      .gte('created_at', inicioDia.toISOString());
+    const total = (data || [])
+      .filter((o: any) => o.estado !== 'cancelada')
+      .reduce((s: number, o: any) => s + Number(o.cantidad_paginas || 0), 0);
+    setUsoDiario(total);
+    return total;
+  }
+
 
   const allowedTypes = [
     'application/pdf',
