@@ -222,6 +222,56 @@ Deno.serve(async (req) => {
       });
     }
 
+    if (action === "repair_users" && Array.isArray(users)) {
+      const results = { created: 0, skipped: 0, updated: 0, errors: [] as string[] };
+      const authUsers: any[] = [];
+      for (let page = 1; page <= 10; page++) {
+        const { data } = await adminClient.auth.admin.listUsers({ page, perPage: 1000 });
+        const list = data?.users || [];
+        authUsers.push(...list);
+        if (list.length < 1000) break;
+      }
+      const byEmail = new Map(authUsers.map((u: any) => [String(u.email || "").toLowerCase(), u]));
+
+      for (const raw of users) {
+        const email = normalizeEmail(raw.email);
+        const dni = normalizeDni(raw.dni);
+        const authUser = byEmail.get(email);
+        if (!authUser) { results.errors.push(`Sin cuenta auth: ${email}`); continue; }
+
+        await adminClient.auth.admin.updateUserById(authUser.id, { password: dni });
+
+        const { data: prof } = await adminClient
+          .from("profiles").select("id").eq("user_id", authUser.id).maybeSingle();
+        if (!prof) {
+          const { error } = await adminClient.from("profiles").insert({
+            user_id: authUser.id,
+            nombre_completo: `${String(raw.apellido || "").trim()} ${String(raw.nombre || "").trim()}`.trim(),
+            dni,
+            email,
+            carrera: String(raw.carrera || "").trim(),
+          });
+          if (error) { results.errors.push(`Perfil ${email}: ${error.message}`); continue; }
+          results.created++;
+        } else {
+          await adminClient.from("profiles").update({ dni }).eq("user_id", authUser.id);
+          results.skipped++;
+        }
+
+        const { data: role } = await adminClient
+          .from("user_roles").select("id").eq("user_id", authUser.id).maybeSingle();
+        if (!role) {
+          await adminClient.from("user_roles").insert({ user_id: authUser.id, role: "student" });
+        }
+
+        await upsertBeca(adminClient, authUser.id, parseBecaPercentage(raw.porcentaje_beca), email, results);
+      }
+
+      return new Response(JSON.stringify({ success: true, ...results }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
     if (action === "delete_with_beca") {
       const result = await handleDeleteWithBeca(adminClient);
       return new Response(JSON.stringify(result), {
